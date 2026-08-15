@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シフト割当管理 - 完了版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-slate-800">シフト割当管理</h2>
+            <button onclick="window.location.href='index.html'" class="text-slate-500 hover:text-slate-900">入力画面へ戻る</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 左側：タスクマスター -->
+            <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-150px)] flex flex-col">
+                <h3 class="font-bold mb-4 text-slate-700">タスクマスター</h3>
+                <!-- カテゴリタブ -->
+                <div class="flex gap-2 mb-4 overflow-x-auto pb-2" id="category-tabs"></div>
+                <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
+            </div>
+
+            <!-- 右側：時間割配置 -->
+            <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-150px)] flex flex-col">
+                <select id="shift-select" class="p-2 border rounded-lg font-bold mb-4">
+                    <option value="s1">朝シフト (8:00〜12:00)</option>
+                </select>
+                <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const TASKS_MASTER = {
+            "清掃": ["トイレ清掃", "駐車場清掃", "バックカウンター整理"],
+            "レジ": ["レジ点検", "釣銭確認", "ポップ確認"],
+            "補充": ["ポットお湯補充", "FF袋補充", "山崎パン2便"]
+        };
+        let activeCat = "清掃";
+        let assignment = { s1: { 8: [], 9: [], 10: [], 11: [] } };
+
+        function renderMaster() {
+            const tabs = document.getElementById('category-tabs');
+            tabs.innerHTML = Object.keys(TASKS_MASTER).map(c => `
+                <button onclick="activeCat='${c}'; renderMaster()" class="px-3 py-1 text-sm rounded-full ${activeCat === c ? 'bg-blue-600 text-white' : 'bg-slate-200'} font-bold whitespace-nowrap">
+                    ${c}
+                </button>
+            `).join('');
+
+            const master = document.getElementById('master-tasks');
+            master.innerHTML = TASKS_MASTER[activeCat].map(t => `
+                <div draggable="true" ondragstart="handleDragStart(event, '${t}')" class="p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-grab font-bold text-slate-700 hover:bg-blue-100 flex justify-between items-center">
+                    ${t}
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderBoard() {
+            const board = document.getElementById('assignment-board');
+            board.innerHTML = [8, 9, 10, 11].map(h => `
+                <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 min-h-[80px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h})">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-xs font-bold text-slate-400">${h}:00〜</h4>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        ${assignment['s1'][h].map(t => `
+                            <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer" onclick="removeTask(${h}, '${t}')"></i></span>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function handleDragStart(e, task) { e.dataTransfer.setData('text/plain', task); }
+        function handleDrop(e, hour) { addTask(hour, e.dataTransfer.getData('text/plain')); }
+        function addTask(hour, task) { if(!assignment['s1'][hour].includes(task)) { assignment['s1'][hour].push(task); renderBoard(); } }
+        function removeTask(hour, task) { assignment['s1'][hour] = assignment['s1'][hour].filter(t => t !== task); renderBoard(); }
+
+        renderMaster();
+        renderBoard();
+    </script>
+</body>
+</html>
