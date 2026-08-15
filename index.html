@@ -5,6 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WS入力ポータル - 完全統合版</title>
+    <header class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <button onclick="window.location.href='dashboard.html'" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-bold transition">
+                    ← ダッシュボードへ
+                </button>
+                <h1 class="font-bold flex items-center gap-2"><i data-lucide="pen-tool"></i> WS作業入力</h1>
+            </div>
+            <div id="global-timer" class="font-mono text-emerald-400 font-bold text-xl">00:00:00</div>
+        </div>
+    </header>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>body { font-family: 'Inter', sans-serif; }</style>
