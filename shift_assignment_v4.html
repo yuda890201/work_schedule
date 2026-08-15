@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シフト割当管理 - 完了版</title>
+    <title>シフト割当管理 - 連携版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -15,9 +15,9 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- 左側：タスクマスター -->
+            <!-- 左側：タスクマスター（LocalStorageから動的読み込み） -->
             <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-150px)] flex flex-col">
-                <h3 class="font-bold mb-4 text-slate-700">タスクマスター</h3>
+                <h3 class="font-bold mb-4 text-slate-700">タスクマスター（登録データ連動）</h3>
                 <!-- カテゴリタブ -->
                 <div class="flex gap-2 mb-4 overflow-x-auto pb-2" id="category-tabs"></div>
                 <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
@@ -35,28 +35,58 @@
 
     <script>
         lucide.createIcons();
-        const TASKS_MASTER = {
-            "清掃": ["トイレ清掃", "駐車場清掃", "バックカウンター整理"],
-            "レジ": ["レジ点検", "釣銭確認", "ポップ確認"],
-            "補充": ["ポットお湯補充", "FF袋補充", "山崎パン2便"]
-        };
-        let activeCat = "清掃";
+
+        // 1. ローカルストレージからタスク管理マスターのデータを取得する
+        // データがない場合の初期フォールバックとしてダッシュボード用のサンプルを入れておく
+        let rawTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
+            { id: 1, name: "トイレ清掃", tag: "清掃", subs: [] },
+            { id: 2, name: "レジ点検", tag: "レジ", subs: [] }
+        ];
+
+        // 2. 取得したタスクデータをタグごとに自動グループ化する
+        const TASKS_MASTER = {};
+        rawTasks.forEach(t => {
+            const tag = t.tag || "その他";
+            if (!TASKS_MASTER[tag]) {
+                TASKS_MASTER[tag] = [];
+            }
+            TASKS_MASTER[tag].push(t.name);
+        });
+
+        // タグが存在しない場合の安全対策
+        const categories = Object.keys(TASKS_MASTER);
+        let activeCat = categories.length > 0 ? categories[0] : "その他";
         let assignment = { s1: { 8: [], 9: [], 10: [], 11: [] } };
 
         function renderMaster() {
             const tabs = document.getElementById('category-tabs');
-            tabs.innerHTML = Object.keys(TASKS_MASTER).map(c => `
+            const catKeys = Object.keys(TASKS_MASTER);
+            
+            if (catKeys.length === 0) {
+                tabs.innerHTML = '<span class="text-xs text-slate-400">タスクが登録されていません。「タスク管理」画面から登録してください。</span>';
+                document.getElementById('master-tasks').innerHTML = '';
+                return;
+            }
+
+            if (!catKeys.includes(activeCat)) {
+                activeCat = catKeys[0];
+            }
+
+            tabs.innerHTML = catKeys.map(c => `
                 <button onclick="activeCat='${c}'; renderMaster()" class="px-3 py-1 text-sm rounded-full ${activeCat === c ? 'bg-blue-600 text-white' : 'bg-slate-200'} font-bold whitespace-nowrap">
                     ${c}
                 </button>
             `).join('');
 
             const master = document.getElementById('master-tasks');
-            master.innerHTML = TASKS_MASTER[activeCat].map(t => `
+            const currentTasks = TASKS_MASTER[activeCat] || [];
+            
+            master.innerHTML = currentTasks.map(t => `
                 <div draggable="true" ondragstart="handleDragStart(event, '${t}')" class="p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-grab font-bold text-slate-700 hover:bg-blue-100 flex justify-between items-center">
                     ${t}
                 </div>
             `).join('');
+            
             lucide.createIcons();
         }
 
