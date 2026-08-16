@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - 完全統合版</title>
+    <title>WS作業入力ポータル - クラウド同期版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>body { font-family: 'Inter', sans-serif; }</style>
@@ -23,7 +23,12 @@
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto p-4 space-y-6">
+    <!-- ローディング表示 -->
+    <div id="loading" class="max-w-6xl mx-auto p-12 text-center font-bold text-slate-500">
+        クラウドから作業ポータルデータを読み込み中...
+    </div>
+
+    <main class="max-w-6xl mx-auto p-4 space-y-6 hidden" id="main-content">
         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <label class="block text-xs font-bold text-slate-500 mb-2">現在のシフト</label>
             <select id="shift-select" onchange="resetShift()" class="w-full p-4 bg-slate-50 border border-slate-300 rounded-lg font-bold text-lg">
@@ -39,7 +44,7 @@
 
     <!-- サブタスク用モーダル -->
     <div id="task-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
             <h3 id="modal-title" class="font-bold text-lg">タスク名</h3>
             <div id="subtask-list" class="space-y-2"></div>
             <button id="complete-btn" onclick="confirmTask()" disabled class="w-full p-4 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed">すべて完了して保存</button>
@@ -49,54 +54,102 @@
     <script>
         lucide.createIcons();
         
+        // ★ここにGASのウェブアプリURLを設定してください
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
+
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
-        const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }];
+        const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('store-name-display').innerText = currentStore.name;
 
-        const staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
+        let staffList = [];
+        let taskMasterMap = {};
+        let SHIFT_DATA = {};
+        let currentShiftKey = "";
+        let currentShift = null;
 
-        const rawMasterTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
-        const taskMasterMap = {};
-        rawMasterTasks.forEach(t => { 
-            if (t && t.name) {
-                taskMasterMap[t.name.trim()] = t.subs || []; 
-            }
-        });
-
-        const storageKey = `ws_shifts_data_${currentStoreId}`;
-        const SHIFT_DATA = JSON.parse(localStorage.getItem(storageKey)) || {
-            "s1": { 
-                name: "朝シフト (8:00〜12:00)", 
-                start: 8, 
-                end: 12, 
-                tasks: { 
-                    r1: { 8: ["ポットのお湯確認補充"], 9: ["山崎パン2便"] }, 
-                    r2: { 8: ["温度チェック★"], 10: ["チルド飲料品出し"] } 
-                } 
-            }
-        };
-
-        const shiftSelect = document.getElementById('shift-select');
-        shiftSelect.innerHTML = Object.keys(SHIFT_DATA).map(k => `
-            <option value="${k}">${SHIFT_DATA[k].name}</option>
-        `).join('');
-
-        let currentShiftKey = Object.keys(SHIFT_DATA)[0];
-        let currentShift = SHIFT_DATA[currentShiftKey];
-
-        // 状態管理
         let state = { 
             r1: [], r2: [], 
-            r1Times: {}, r2Times: {}, // タスク名: 所要時間(秒)
-            r1LastCompleteTime: Date.now(), // 直近のタスク完了時刻（またはフェーズ開始時刻）
+            r1Times: {}, r2Times: {}, 
+            r1LastCompleteTime: Date.now(), 
             r2LastCompleteTime: Date.now(),
             r1StartTime: Date.now(), 
             r2StartTime: Date.now(),
-            r1Staff: staffList.length > 0 ? staffList[0].name : "未選択",
-            r2Staff: staffList.length > 1 ? staffList[1].name : "未選択",
-            currentHour: currentShift.start 
+            r1Staff: "未選択",
+            r2Staff: "未選択",
+            currentHour: 8 
         }; 
+
+        // クラウドから全データを一括非同期取得
+        async function initPortal() {
+            try {
+                // 1. スタッフデータの取得
+                const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
+                const staffData = await staffRes.json();
+                staffList = Array.isArray(staffData) ? staffData : [];
+
+                // 2. タスクマスターの取得
+                const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
+                const taskData = await taskRes.json();
+                if (Array.isArray(taskData)) {
+                    taskData.forEach(t => { 
+                        if (t && t.name) {
+                            taskMasterMap[t.name.trim()] = typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || []); 
+                        }
+                    });
+                }
+
+                // 3. シフトデータの取得
+                const sheetName = `shifts_${currentStoreId}`;
+                const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
+                const shiftDataJson = await shiftRes.json();
+
+                if (Array.isArray(shiftDataJson) && shiftDataJson.length > 0) {
+                    SHIFT_DATA = JSON.parse(shiftDataJson[0].data || "{}");
+                }
+
+                if (!SHIFT_DATA || Object.keys(SHIFT_DATA).length === 0) {
+                    SHIFT_DATA = {
+                        "s_morning": { 
+                            name: "朝シフト (8:00〜12:00)", 
+                            start: 8, 
+                            end: 12, 
+                            tasks: { 
+                                r1: { 8: ["ポットのお湯確認補充"], 9: ["値引きシール貼り( )14"] }, 
+                                r2: { 8: ["温度チェック★"], 10: ["チルド飲料品出し"] } 
+                            } 
+                        }
+                    };
+                }
+
+                currentShiftKey = Object.keys(SHIFT_DATA)[0];
+                currentShift = SHIFT_DATA[currentShiftKey];
+                state.currentHour = currentShift.start;
+                
+                if (staffList.length > 0) {
+                    state.r1Staff = staffList[0].name;
+                    if (staffList.length > 1) state.r2Staff = staffList[1].name;
+                }
+
+            } catch (error) {
+                console.error("ポータル初期化エラー:", error);
+                SHIFT_DATA = {
+                    "s1": { name: "朝シフト (8:00〜12:00)", start: 8, end: 12, tasks: { r1: { 8: ["ポットのお湯確認補充"] }, r2: { 8: ["温度チェック★"] } } }
+                };
+                currentShiftKey = Object.keys(SHIFT_DATA)[0];
+                currentShift = SHIFT_DATA[currentShiftKey];
+            }
+
+            // セレクトボックス構築
+            const shiftSelect = document.getElementById('shift-select');
+            shiftSelect.innerHTML = Object.keys(SHIFT_DATA).map(k => `
+                <option value="${k}">${SHIFT_DATA[k].name}</option>
+            `).join('');
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            renderApp();
+        }
 
         setInterval(() => {
             const now = new Date();
@@ -217,7 +270,7 @@
         }
 
         function handleTaskClick(regKey, taskName) {
-            if (state[regKey].includes(taskName)) return; // 完了済みの場合は何もしない
+            if (state[regKey].includes(taskName)) return;
 
             const trimmedName = taskName.trim();
             let subs = taskMasterMap[trimmedName];
@@ -269,8 +322,6 @@
             if (!state[regKey].includes(taskName)) {
                 const nowTime = Date.now();
                 const lastTime = regKey === 'r1' ? state.r1LastCompleteTime : state.r2LastCompleteTime;
-                
-                // 所要時間（前回完了時刻、またはフェーズ開始時刻から今までの秒数）
                 const duration = Math.floor((nowTime - lastTime) / 1000);
 
                 if (regKey === 'r1') {
@@ -306,7 +357,8 @@
             }
         }
 
-        renderApp();
+        // 初期化実行
+        initPortal();
     </script>
 </body>
 </html>
