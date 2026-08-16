@@ -3,14 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - ログ蓄積版</title>
+    <title>WS作業入力ポータル - 印刷対応版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <style>body { font-family: 'Inter', sans-serif; }</style>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* 印刷時のレイアウト調整 (A4サイズ1枚に収める) */
+        @media print {
+            body * { visibility: hidden; }
+            #print-report-area, #print-report-area * { visibility: visible; }
+            #print-report-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 10mm;
+                box-sizing: border-box;
+                background: white !important;
+            }
+            .no-print { display: none !important; }
+        }
+    </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
 
-    <header class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md">
+    <header class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md no-print">
         <div class="max-w-6xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-4">
                 <button onclick="window.location.href='dashboard.html'" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-bold transition">← ダッシュボードへ</button>
@@ -29,11 +47,17 @@
     </div>
 
     <main class="max-w-6xl mx-auto p-4 space-y-6 hidden" id="main-content">
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-            <label class="block text-xs font-bold text-slate-500 mb-2">現在のシフト</label>
-            <select id="shift-select" onchange="resetShift()" class="w-full p-4 bg-slate-50 border border-slate-300 rounded-lg font-bold text-lg">
-                <!-- 動的に生成されます -->
-            </select>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4 no-print">
+            <div class="flex-1 min-w-[250px]">
+                <label class="block text-xs font-bold text-slate-500 mb-1">現在のシフト</label>
+                <select id="shift-select" onchange="resetShift()" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg font-bold text-base">
+                </select>
+            </div>
+            <div>
+                <button onclick="openPrintPreview()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow flex items-center gap-2 transition">
+                    <i data-lucide="printer" class="w-5 h-5"></i> シフト報告シートを印刷
+                </button>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="main-area">
@@ -43,11 +67,54 @@
     </main>
 
     <!-- サブタスク用モーダル -->
-    <div id="task-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+    <div id="task-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
             <h3 id="modal-title" class="font-bold text-lg">タスク名</h3>
             <div id="subtask-list" class="space-y-2"></div>
             <button id="complete-btn" onclick="confirmTask()" disabled class="w-full p-4 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed">すべて完了して保存</button>
+        </div>
+    </div>
+
+    <!-- A4印刷用プレビューモーダル -->
+    <div id="print-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
+        <div class="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-lg text-slate-800">シフト作業報告シート（プレビュー）</h3>
+                <button onclick="closePrintPreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <!-- 印刷対象エリア -->
+            <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-sm">
+                <div class="text-center border-b pb-4 space-y-1">
+                    <h2 class="text-xl font-bold">シフト作業実施報告書</h2>
+                    <p id="report-store-date" class="text-xs text-slate-500"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border text-xs">
+                    <div><span class="font-bold text-slate-500">対象シフト:</span> <span id="report-shift-name" class="font-bold"></span></div>
+                    <div><span class="font-bold text-slate-500">出力日時:</span> <span id="report-output-time"></span></div>
+                    <div><span class="font-bold text-slate-500">1レジ担当者:</span> <span id="report-r1-staff" class="font-bold text-blue-600"></span></div>
+                    <div><span class="font-bold text-slate-500">2レジ担当者:</span> <span id="report-r2-staff" class="font-bold text-emerald-600"></span></div>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-bold text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mb-2">1レジ 実施タスク一覧</h4>
+                        <div id="report-r1-tasks" class="space-y-1"></div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded mb-2">2レジ 実施タスク一覧</h4>
+                        <div id="report-r2-tasks" class="space-y-1"></div>
+                    </div>
+                </div>
+                <div class="pt-8 border-t flex justify-between text-xs text-slate-400">
+                    <p>管理者確認印: ___________________</p>
+                    <p>WS作業入力ポータルシステム</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button onclick="closePrintPreview()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
+                <button onclick="window.print()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-sm flex items-center gap-1 shadow">
+                    <i data-lucide="printer" class="w-4 h-4"></i> 印刷する
+                </button>
+            </div>
         </div>
     </div>
 
@@ -80,7 +147,6 @@
             currentHour: 8 
         }; 
 
-        // クラウドから全データを一括非同期取得
         async function initPortal() {
             try {
                 const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
@@ -314,7 +380,6 @@
             }
         }
 
-        // タスク完了時にスプレッドシートの logs シートへ自動記録
         async function confirmTask() {
             const regKey = state.activeReg;
             const taskName = state.activeTask;
@@ -328,7 +393,7 @@
                     state.r1Times[taskName] = durationSec;
                     state.r1LastCompleteTime = nowTime;
                 } else {
-                    state.r2Times[taskName] = durationSec; // 修正点: duration から durationSec に統一
+                    state.r2Times[taskName] = durationSec;
                     state.r2LastCompleteTime = nowTime;
                 }
 
@@ -382,6 +447,59 @@
             } else {
                 alert("このシフトの最終時間です！お疲れ様でした。");
             }
+        }
+
+        // 印刷プレビューを開く
+        function openPrintPreview() {
+            document.getElementById('report-store-date').innerText = `店舗: ${currentStore.name} ／ 実施日: ${new Date().toLocaleDateString()}`;
+            document.getElementById('report-shift-name').innerText = currentShift.name;
+            document.getElementById('report-output-time').innerText = new Date().toLocaleString();
+            document.getElementById('report-r1-staff').innerText = state.r1Staff;
+            document.getElementById('report-r2-staff').innerText = state.r2Staff;
+
+            // 1レジのタスク一覧生成
+            const r1AllTasks = [...new Set(Object.values(currentShift.tasks.r1 || {}).flat())];
+            const r1Container = document.getElementById('report-r1-tasks');
+            if (r1AllTasks.length === 0) {
+                r1Container.innerHTML = '<p class="text-xs text-slate-400">タスクなし</p>';
+            } else {
+                r1Container.innerHTML = r1AllTasks.map(name => {
+                    const isDone = state.r1.includes(name);
+                    const sec = state.r1Times[name];
+                    const timeStr = (isDone && sec !== undefined) ? ` (${Math.floor(sec/60)}分${sec%60}秒)` : '';
+                    return `
+                        <div class="flex justify-between items-center text-xs border-b border-slate-100 py-1">
+                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
+                            <span class="font-mono text-slate-500">${isDone ? '完了' + timeStr : '未完了'}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // 2レジのタスク一覧生成
+            const r2AllTasks = [...new Set(Object.values(currentShift.tasks.r2 || {}).flat())];
+            const r2Container = document.getElementById('report-r2-tasks');
+            if (r2AllTasks.length === 0) {
+                r2Container.innerHTML = '<p class="text-xs text-slate-400">タスクなし</p>';
+            } else {
+                r2Container.innerHTML = r2AllTasks.map(name => {
+                    const isDone = state.r2.includes(name);
+                    const sec = state.r2Times[name];
+                    const timeStr = (isDone && sec !== undefined) ? ` (${Math.floor(sec/60)}分${sec%60}秒)` : '';
+                    return `
+                        <div class="flex justify-between items-center text-xs border-b border-slate-100 py-1">
+                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
+                            <span class="font-mono text-slate-500">${isDone ? '完了' + timeStr : '未完了'}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('print-modal').classList.remove('hidden');
+        }
+
+        function closePrintPreview() {
+            document.getElementById('print-modal').classList.add('hidden');
         }
 
         // 初期化実行
