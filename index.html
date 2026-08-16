@@ -58,7 +58,11 @@
         // タスクマスター（サブタスク情報を引くため）
         const rawMasterTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const taskMasterMap = {};
-        rawMasterTasks.forEach(t => { taskMasterMap[t.name] = t.subs || []; });
+        rawMasterTasks.forEach(t => { 
+            if (t && t.name) {
+                taskMasterMap[t.name.trim()] = t.subs || []; 
+            }
+        });
 
         // 店舗別シフトデータの読み込み
         const storageKey = `ws_shifts_data_${currentStoreId}`;
@@ -146,9 +150,10 @@
             lucide.createIcons();
         }
 
-        // タスククリック時の振り分け（サブタスク有無を判定）
+        // タスククリック時の振り分け（サブタスク有無を正確に判定）
         function handleTaskClick(regKey, taskName) {
-            const subs = taskMasterMap[taskName] || [];
+            const trimmedName = taskName.trim();
+            const subs = taskMasterMap[trimmedName] || [];
             
             if (subs.length > 0) {
                 // サブタスクが存在する場合はモーダルを表示
