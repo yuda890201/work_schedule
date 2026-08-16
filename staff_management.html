@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>スタッフ管理</title>
+    <title>スタッフ管理（スプレッドシート連携）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -10,7 +10,7 @@
 
     <div class="max-w-5xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
-            <h2 class="text-2xl font-bold text-slate-800">スタッフ管理</h2>
+            <h2 class="text-2xl font-bold text-slate-800">スタッフ管理（クラウド同期）</h2>
             <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
         </div>
 
@@ -24,7 +24,10 @@
             </button>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <!-- ローディング表示 -->
+        <div id="loading" class="text-center py-8 text-slate-500 font-bold">データをクラウドから読み込み中...</div>
+
+        <div class="bg-white rounded-xl shadow-sm border overflow-hidden hidden" id="table-container">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50 border-b text-slate-500 text-xs font-bold">
@@ -60,48 +63,59 @@
     <script>
         lucide.createIcons();
 
-        // 1. 店舗マスターの取得（なければ1号店・2号店を作成）
-        let storesMaster = JSON.parse(localStorage.getItem('ws_stores_master'));
-        if (!storesMaster || storesMaster.length === 0) {
-            storesMaster = [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
-            localStorage.setItem('ws_stores_master', JSON.stringify(storesMaster));
-        }
+        // ★ここにデプロイしたGoogle Apps ScriptのウェブアプリURLを入力してください
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec"; 
 
+        const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('current-store-display').innerText = currentStore.name;
 
-        // 2. スタッフデータの初期化（1号店・2号店にスタッフを振り分けて登録）
-        let staffList = JSON.parse(localStorage.getItem('ws_staff_list'));
-        
-        // データが未登録、または旧仕様のデータ構造の可能性があるため強制リセットして2店舗分の初期データを構築
-        if (!staffList || staffList.length === 0) {
-            const store1Name = storesMaster[0] ? storesMaster[0].name : "1号店";
-            const store2Name = storesMaster[1] ? storesMaster[1].name : "2号店";
+        let staffList = [];
+        let editingUniqueId = null;
 
-            staffList = [
-                // 1号店メンバー
-                { uniqueId: 1, empId: "MGR001", name: "オーナー", store: store1Name, note: "オーナー" },
-                { uniqueId: 2, empId: "MGR002", name: "マネージャー", store: store1Name, note: "マネージャー" },
-                { uniqueId: 3, empId: "MGR003", name: "店長(1号店)", store: store1Name, note: "店長" },
-                { uniqueId: 4, empId: "STF001", name: "スタッフ1", store: store1Name, note: "1号店スタッフ" },
-                { uniqueId: 5, empId: "STF002", name: "スタッフ2", store: store1Name, note: "1号店スタッフ" },
-                { uniqueId: 6, empId: "STF003", name: "スタッフ3", store: store1Name, note: "1号店スタッフ" },
-                { uniqueId: 7, empId: "STF004", name: "スタッフ4", store: store1Name, note: "1号店スタッフ" },
-                { uniqueId: 8, empId: "STF005", name: "スタッフ5", store: store1Name, note: "1号店スタッフ" },
+        // スプレッドシートからデータを取得
+        async function fetchStaffData() {
+            try {
+                const response = await fetch(`${GAS_API_URL}?sheet=staff`);
+                const data = await response.json();
                 
-                // 2号店メンバー
-                { uniqueId: 9, empId: "MGR004", name: "店長(2号店)", store: store2Name, note: "店長" },
-                { uniqueId: 10, empId: "STF006", name: "スタッフ6", store: store2Name, note: "2号店スタッフ" },
-                { uniqueId: 11, empId: "STF007", name: "スタッフ7", store: store2Name, note: "2号店スタッフ" },
-                { uniqueId: 12, empId: "STF008", name: "スタッフ8", store: store2Name, note: "2号店スタッフ" },
-                { uniqueId: 13, empId: "STF009", name: "スタッフ9", store: store2Name, note: "2号店スタッフ" },
-                { uniqueId: 14, empId: "STF010", name: "スタッフ10", store: store2Name, note: "2号店スタッフ" }
-            ];
-            localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
+                if (Array.isArray(data) && data.length > 0) {
+                    staffList = data;
+                } else {
+                    // データが空の場合はデフォルトデータを生成してクラウドに保存
+                    staffList = [
+                        { uniqueId: 1, empId: "MGR001", name: "オーナー", store: storesMaster[0].name, note: "オーナー" },
+                        { uniqueId: 2, empId: "STF001", name: "スタッフ1", store: storesMaster[0].name, note: "スタッフ" }
+                    ];
+                    await saveStaffDataToCloud();
+                }
+            } catch (error) {
+                console.error("データ取得エラー:", error);
+                alert("クラウドからのデータ取得に失敗しました。ローカルデータを使用します。");
+                staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('table-container').classList.remove('hidden');
+            renderStoreOptions();
+            renderTable();
         }
 
-        let editingUniqueId = null;
+        // スプレッドシートへデータを保存
+        async function saveStaffDataToCloud() {
+            try {
+                await fetch(GAS_API_URL, {
+                    method: "POST",
+                    mode: "no-cors", // GASのCORS制限回避用
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sheet: "staff", action: "save", rows: staffList })
+                });
+            } catch (error) {
+                console.error("データ保存エラー:", error);
+                alert("クラウドへの保存に失敗しました。");
+            }
+        }
 
         function renderStoreOptions() {
             const select = document.getElementById('staff-store-input');
@@ -110,13 +124,7 @@
 
         function renderTable() {
             const tbody = document.getElementById('staff-table-body');
-            
-            // 現在選択中の店舗のスタッフを最優先にソート
-            const sortedList = [...staffList].sort((a, b) => {
-                const aMatch = (a.store === currentStore.name) ? 1 : 0;
-                const bMatch = (b.store === currentStore.name) ? 1 : 0;
-                return bMatch - aMatch;
-            });
+            const sortedList = [...staffList].sort((a, b) => (b.store === currentStore.name) - (a.store === currentStore.name));
 
             tbody.innerHTML = sortedList.map(s => `
                 <tr class="${s.store === currentStore.name ? 'bg-blue-50/30' : ''} hover:bg-slate-50">
@@ -143,7 +151,7 @@
         }
 
         function openEditModal(id) {
-            const s = staffList.find(x => x.uniqueId === id);
+            const s = staffList.find(x => Number(x.uniqueId) === Number(id));
             if (!s) return;
             editingUniqueId = id;
             document.getElementById('modal-title').innerText = "スタッフ編集";
@@ -159,8 +167,9 @@
             document.getElementById('staff-modal').classList.add('hidden'); 
         }
 
-        function saveStaff() {
+        async function saveStaff() {
             const data = {
+                uniqueId: editingUniqueId ? editingUniqueId : Date.now(),
                 empId: document.getElementById('staff-id-input').value.trim(),
                 name: document.getElementById('staff-name-input').value.trim(),
                 store: document.getElementById('staff-store-input').value,
@@ -173,19 +182,22 @@
             }
 
             if (editingUniqueId) {
-                const s = staffList.find(x => x.uniqueId === editingUniqueId);
-                if (s) Object.assign(s, data);
+                const index = staffList.findIndex(x => Number(x.uniqueId) === Number(editingUniqueId));
+                if (index !== -1) staffList[index] = data;
             } else {
-                staffList.push({ uniqueId: Date.now(), ...data });
+                staffList.push(data);
             }
             
-            localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
             closeModal();
-            renderTable();
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('table-container').classList.add('hidden');
+            
+            await saveStaffDataToCloud();
+            await fetchStaffData(); // 再読み込み
         }
 
-        renderStoreOptions();
-        renderTable();
+        // 初期化実行
+        fetchStaffData();
     </script>
 </body>
 </html>
