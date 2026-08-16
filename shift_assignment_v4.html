@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シフト割当管理</title>
+    <title>シフト割当管理（クラウド同期）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -10,43 +10,51 @@
 
     <div class="max-w-7xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
-            <h2 class="text-2xl font-bold text-slate-800">シフト割当管理（1レジ・2レジ別）</h2>
+            <h2 class="text-2xl font-bold text-slate-800">シフト割当管理（クラウド同期）</h2>
             <div class="flex items-center gap-4">
                 <span id="current-store-display" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-sm"></span>
                 <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
             </div>
         </div>
 
-        <!-- シフト管理バー -->
-        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <label class="font-bold text-slate-700 text-sm">対象シフト:</label>
-                <select id="shift-select" onchange="changeShift(this.value)" class="p-2 border rounded-lg font-bold bg-slate-50 text-slate-800"></select>
-            </div>
-            <div class="flex items-center gap-2">
-                <button onclick="openShiftModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
-                    <i data-lucide="plus" class="w-4 h-4"></i> 新規シフト追加
-                </button>
-                <button onclick="openEditShiftModal()" class="px-3 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 flex items-center gap-1">
-                    <i data-lucide="edit-3" class="w-4 h-4"></i> シフト編集
-                </button>
-                <button onclick="deleteCurrentShift()" class="px-3 py-2 bg-red-50 text-red-600 font-bold rounded-lg text-sm hover:bg-red-100 border border-red-200">
-                    シフト削除
-                </button>
-            </div>
+        <!-- ローディング表示 -->
+        <div id="loading" class="bg-white p-8 rounded-xl shadow-sm border text-center font-bold text-slate-500">
+            クラウドからシフト・タスクデータを読み込み中...
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- 左側：タスクマスター -->
-            <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
-                <h3 class="font-bold mb-4 text-slate-700">タスクマスター</h3>
-                <div class="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0" id="category-tabs"></div>
-                <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
+        <!-- メイン画面（読込完了後に表示） -->
+        <div id="main-content" class="space-y-6 hidden">
+            <!-- シフト管理バー -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <label class="font-bold text-slate-700 text-sm">対象シフト:</label>
+                    <select id="shift-select" onchange="changeShift(this.value)" class="p-2 border rounded-lg font-bold bg-slate-50 text-slate-800"></select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openShiftModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
+                        <i data-lucide="plus" class="w-4 h-4"></i> 新規シフト追加
+                    </button>
+                    <button onclick="openEditShiftModal()" class="px-3 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 flex items-center gap-1">
+                        <i data-lucide="edit-3" class="w-4 h-4"></i> シフト編集
+                    </button>
+                    <button onclick="deleteCurrentShift()" class="px-3 py-2 bg-red-50 text-red-600 font-bold rounded-lg text-sm hover:bg-red-100 border border-red-200">
+                        シフト削除
+                    </button>
+                </div>
             </div>
 
-            <!-- 右側：時間割配置（1レジ・2レジ分割） -->
-            <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
-                <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1 pr-2"></div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左側：タスクマスター -->
+                <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
+                    <h3 class="font-bold mb-4 text-slate-700">タスクマスター</h3>
+                    <div class="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0" id="category-tabs"></div>
+                    <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
+                </div>
+
+                <!-- 右側：時間割配置（1レジ・2レジ分割） -->
+                <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
+                    <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1 pr-2"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -81,69 +89,116 @@
     <script>
         lucide.createIcons();
 
-        // 店舗連動設定
+        // ★ここにGASのウェブアプリURLを設定してください
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
+
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('current-store-display').innerText = currentStore.name;
 
-        // タスクマスターの読み込み
-        let rawTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
-        const TASKS_MASTER = {};
-        rawTasks.forEach(t => {
-            const tag = t.tag || "その他";
-            if (!TASKS_MASTER[tag]) TASKS_MASTER[tag] = [];
-            TASKS_MASTER[tag].push(t.name);
-        });
-
-        const categories = Object.keys(TASKS_MASTER);
-        let activeCat = categories.length > 0 ? categories[0] : "その他";
-
-        // 店舗別シフトデータの初期化（1レジ r1, 2レジ r2 に分割対応）
-        const storageKey = `ws_shifts_data_${currentStoreId}`;
-        let shiftsData = JSON.parse(localStorage.getItem(storageKey));
-        
-        if (!shiftsData || Object.keys(shiftsData).length === 0 || !shiftsData[Object.keys(shiftsData)[0]].tasks.r1) {
-            shiftsData = {
-                "s_morning": {
-                    name: "朝・午前シフト (8:00〜12:00)",
-                    start: 8,
-                    end: 12,
-                    tasks: {
-                        r1: { 8: ["ポットのお湯確認補充", "温度チェック★"], 9: ["値引きシール貼り( )14", "山崎パン2便"], 10: ["チルド飲料品出し", "ホッターズ調理"], 11: ["たばこ納品検品", "トイレ清掃"] },
-                        r2: { 8: ["FF袋補充", "調味料補充"], 9: ["売場写真", "用度品発注カードつける"], 10: ["ホット飲料品出し", "常温惣菜調理"], 11: ["たばこ補充", "清掃チェック(トイレ)"] }
-                    }
-                },
-                "s_afternoon": {
-                    name: "昼・午後シフト (13:00〜17:00)",
-                    start: 13,
-                    end: 17,
-                    tasks: {
-                        r1: { 13: ["コーヒーマシン清掃", "温度チェック★"], 14: ["FF袋補充", "水補充"], 15: ["FF廃棄チェック", "ホッターズ調理"], 16: ["センター3便(パン) 売場写真", "POP整理"] },
-                        r2: { 13: ["コーヒー用度品補充", "チルド飲料品出し"], 14: ["廃棄チェック( )14", "たばこ補充"], 15: ["トイレ清掃", "常温惣菜調理"], 16: ["宅急便集荷", "レジ点検"] }
-                    }
-                }
-            };
-            localStorage.setItem(storageKey, JSON.stringify(shiftsData));
-        }
-
-        let currentShiftKey = Object.keys(shiftsData)[0];
+        let TASKS_MASTER = {};
+        let shiftsData = {};
+        let currentShiftKey = "";
+        let activeCat = "すべて";
         let isEditing = false;
 
-        function saveShifts() {
-            localStorage.setItem(storageKey, JSON.stringify(shiftsData));
-        }
+        // クラウド（またはローカル）からデータ一括取得
+        async function initData() {
+            try {
+                // 1. タスクマスターの取得
+                const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
+                const taskData = await taskRes.json();
+                let rawTasks = [];
+                if (Array.isArray(taskData) && taskData.length > 0) {
+                    rawTasks = taskData.map(t => ({
+                        name: t.name,
+                        tag: t.tag || "その他",
+                        subs: typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : []
+                    }));
+                } else {
+                    rawTasks = [
+                        { name: "ポットのお湯確認補充", tag: "FF", subs: ["残量確認"] },
+                        { name: "温度チェック★", tag: "管理", subs: ["確認"] },
+                        { name: "値引きシール貼り( )14", tag: "販売", subs: ["貼付"] },
+                        { name: "トイレ清掃", tag: "清掃", subs: ["清掃完了"] }
+                    ];
+                }
 
-        function renderShiftSelect() {
-            const select = document.getElementById('shift-select');
-            select.innerHTML = Object.keys(shiftsData).map(k => `
-                <option value="${k}" ${k === currentShiftKey ? 'selected' : ''}>${shiftsData[k].name}</option>
-            `).join('');
-        }
+                TASKS_MASTER = {};
+                rawTasks.forEach(t => {
+                    const tag = t.tag || "その他";
+                    if (!TASKS_MASTER[tag]) TASKS_MASTER[tag] = [];
+                    TASKS_MASTER[tag].push(t.name);
+                });
 
-        function changeShift(key) {
-            currentShiftKey = key;
+                // 2. シフトデータの取得（店舗別シート: shifts_store_1 など）
+                const sheetName = `shifts_${currentStoreId}`;
+                const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
+                const shiftDataJson = await shiftRes.json();
+
+                if (Array.isArray(shiftDataJson) && shiftDataJson.length > 0) {
+                    // JSON形式で保存されていたデータを復元
+                    shiftsData = JSON.parse(shiftDataJson[0].data || "{}");
+                }
+
+                if (!shiftsData || Object.keys(shiftsData).length === 0) {
+                    // デフォルトシフトデータ（PDF準拠）
+                    shiftsData = {
+                        "s_morning": {
+                            name: "朝・午前シフト (8:00〜12:00)",
+                            start: 8,
+                            end: 12,
+                            tasks: {
+                                r1: { 8: ["ポットのお湯確認補充", "温度チェック★"], 9: ["値引きシール貼り( )14"], 10: ["チルド飲料品出し"], 11: ["トイレ清掃"] },
+                                r2: { 8: ["FF袋補充"], 9: ["売場写真"], 10: ["ホット飲料品出し"], 11: ["たばこ補充"] }
+                            }
+                        },
+                        "s_afternoon": {
+                            name: "昼・午後シフト (13:00〜17:00)",
+                            start: 13,
+                            end: 17,
+                            tasks: {
+                                r1: { 13: ["コーヒーマシン清掃"], 14: ["FF袋補充"], 15: ["ホッターズ調理"], 16: ["POP整理"] },
+                                r2: { 13: ["コーヒー用度品補充"], 14: ["廃棄チェック( )14"], 15: ["トイレ清掃"], 16: ["宅急便集荷"] }
+                            }
+                        }
+                    };
+                    await saveShiftsToCloud();
+                }
+
+                currentShiftKey = Object.keys(shiftsData)[0];
+
+            } catch (error) {
+                console.error("データ同期エラー:", error);
+                // フォールバック
+                shiftsData = JSON.parse(localStorage.getItem(`ws_shifts_data_${currentStoreId}`)) || {
+                    "s_morning": { name: "朝シフト (8:00〜12:00)", start: 8, end: 12, tasks: { r1: { 8: ["ポットのお湯確認補充"] }, r2: { 8: ["FF袋補充"] } } }
+                };
+                currentShiftKey = Object.keys(shiftsData)[0];
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            renderMaster();
             renderBoard();
+        }
+
+        // クラウドへシフトデータを保存
+        async function saveShiftsToCloud() {
+            localStorage.setItem(`ws_shifts_data_${currentStoreId}`, JSON.stringify(shiftsData));
+            try {
+                const sheetName = `shifts_${currentStoreId}`;
+                const payload = [{ id: currentStoreId, data: JSON.stringify(shiftsData) }];
+                await fetch(GAS_API_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sheet: sheetName, action: "save", rows: payload })
+                });
+            } catch (error) {
+                console.error("シフト保存エラー:", error);
+            }
         }
 
         function renderMaster() {
@@ -151,7 +206,7 @@
             const catKeys = Object.keys(TASKS_MASTER);
             
             if (catKeys.length === 0) {
-                tabs.innerHTML = '<span class="text-xs text-slate-400">タスクが登録されていません。</span>';
+                tabs.innerHTML = '<span class="text-xs text-slate-400">タスクがありません。</span>';
                 document.getElementById('master-tasks').innerHTML = '';
                 return;
             }
@@ -194,7 +249,6 @@
                     <div class="border rounded-xl p-4 bg-slate-50 space-y-3">
                         <div class="font-bold text-slate-600 text-sm border-b pb-1">${h}:00〜</div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <!-- 1レジレーン -->
                             <div class="border-2 border-dashed border-blue-200 bg-white rounded-lg p-3 min-h-[70px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h}, 'r1')">
                                 <div class="text-[10px] font-bold text-blue-600 mb-1">1レジ担当者</div>
                                 <div class="flex flex-wrap gap-1.5">
@@ -205,7 +259,6 @@
                                     `).join('')}
                                 </div>
                             </div>
-                            <!-- 2レジレーン -->
                             <div class="border-2 border-dashed border-emerald-200 bg-white rounded-lg p-3 min-h-[70px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h}, 'r2')">
                                 <div class="text-[10px] font-bold text-emerald-600 mb-1">2レジ担当者</div>
                                 <div class="flex flex-wrap gap-1.5">
@@ -224,20 +277,32 @@
             lucide.createIcons();
         }
 
+        function renderShiftSelect() {
+            const select = document.getElementById('shift-select');
+            select.innerHTML = Object.keys(shiftsData).map(k => `
+                <option value="${k}" ${k === currentShiftKey ? 'selected' : ''}>${shiftsData[k].name}</option>
+            `).join('');
+        }
+
+        function changeShift(key) {
+            currentShiftKey = key;
+            renderBoard();
+        }
+
         function handleDragStart(e, task) { e.dataTransfer.setData('text/plain', task); }
-        function handleDrop(e, hour, regKey) { 
+        async function handleDrop(e, hour, regKey) { 
             const task = e.dataTransfer.getData('text/plain');
             const tasksAtHour = shiftsData[currentShiftKey].tasks[regKey][hour];
             if (!tasksAtHour.includes(task)) {
                 tasksAtHour.push(task);
-                saveShifts();
+                await saveShiftsToCloud();
                 renderBoard();
             }
         }
-        function removeTask(hour, regKey, task) {
+        async function removeTask(hour, regKey, task) {
             const tasksAtHour = shiftsData[currentShiftKey].tasks[regKey][hour];
             shiftsData[currentShiftKey].tasks[regKey][hour] = tasksAtHour.filter(t => t !== task);
-            saveShifts();
+            await saveShiftsToCloud();
             renderBoard();
         }
 
@@ -265,7 +330,7 @@
             document.getElementById('shift-modal').classList.add('hidden'); 
         }
 
-        function saveShift() {
+        async function saveShift() {
             const name = document.getElementById('new-shift-name').value.trim();
             const start = parseInt(document.getElementById('new-shift-start').value);
             const end = parseInt(document.getElementById('new-shift-end').value);
@@ -297,12 +362,14 @@
                 currentShiftKey = newKey;
             }
 
-            saveShifts();
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+            await saveShiftsToCloud();
             closeShiftModal();
-            renderBoard();
+            initData();
         }
 
-        function deleteCurrentShift() {
+        async function deleteCurrentShift() {
             const keys = Object.keys(shiftsData);
             if (keys.length <= 1) {
                 alert("最後のシフトは削除できません。");
@@ -311,13 +378,15 @@
             if (confirm(`「${shiftsData[currentShiftKey].name}」を削除しますか？`)) {
                 delete shiftsData[currentShiftKey];
                 currentShiftKey = Object.keys(shiftsData)[0];
-                saveShifts();
-                renderBoard();
+                document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('main-content').classList.add('hidden');
+                await saveShiftsToCloud();
+                initData();
             }
         }
 
-        renderMaster();
-        renderBoard();
+        // 初期化実行
+        initData();
     </script>
 </body>
 </html>
