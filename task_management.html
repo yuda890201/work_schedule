@@ -11,13 +11,25 @@
     <div class="max-w-3xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
             <h2 class="text-2xl font-bold text-slate-800">タスク管理マスター</h2>
-            <button onclick="window.location.href='index.html'" class="text-slate-500 hover:text-slate-900 font-bold">戻る</button>
+            <!-- ダッシュボードへ戻るように変更 -->
+            <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
         </div>
 
-        <!-- 絞り込みフィルター -->
-        <div class="bg-white p-4 rounded-xl shadow-sm border flex gap-2 overflow-x-auto">
-            <button onclick="filterTasks('すべて')" class="px-3 py-1 bg-slate-200 rounded-full text-sm font-bold">すべて</button>
-            <div id="filter-buttons" class="flex gap-2"></div>
+        <!-- 絞り込みフィルター & 並べ替えバー -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-4">
+            <div class="flex gap-2 overflow-x-auto items-center">
+                <button onclick="filterTasks('すべて')" class="px-3 py-1 bg-slate-200 rounded-full text-sm font-bold whitespace-nowrap">すべて</button>
+                <div id="filter-buttons" class="flex gap-2"></div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <label class="text-xs font-bold text-slate-500">並び替え:</label>
+                <select id="sort-select" onchange="changeSort(this.value)" class="p-2 border rounded-lg text-xs font-bold bg-slate-50 text-slate-700">
+                    <option value="date_desc">作成日時（新しい順）</option>
+                    <option value="date_asc">作成日時（古い順）</option>
+                    <option value="name_asc">名前（昇順）</option>
+                    <option value="name_desc">名前（降順）</option>
+                </select>
+            </div>
         </div>
 
         <div class="bg-white rounded-xl shadow-sm border p-6">
@@ -28,29 +40,20 @@
         </div>
     </div>
 
+    <!-- 共有タグサジェスト用のdatalist -->
+    <datalist id="tag-suggestions"></datalist>
+
     <script>
         lucide.createIcons();
         let currentFilter = 'すべて';
+        let currentSort = 'date_desc';
 
-        // 初期データとしてご提示いただいた全タスクリストを組み込んでいます
-        const initialTasks = [
-            {tag: "FF", name: "ホッターズ調理", subs: []}, {tag: "FF", name: "常温惣菜調理", subs: []}, {tag: "FF", name: "中華まん調理", subs: []}, {tag: "FF", name: "FF廃棄チェック", subs: []}, {tag: "FF", name: "FFレイアウト変更", subs: []},
-            {tag: "発注", name: "新商品導入", subs: []}, {tag: "発注", name: "事前発注", subs: []}, {tag: "発注", name: "スキャン発注", subs: []}, {tag: "発注", name: "SHOPS発注", subs: []},
-            {tag: "補充", name: "用度品補充", subs: []}, {tag: "補充", name: "セルフレジ用度品補充", subs: []}, {tag: "補充", name: "調味料補充", subs: []}, {tag: "補充", name: "FF袋補充", subs: []}, {tag: "補充", name: "コーヒー用度品補充", subs: []}, {tag: "補充", name: "コーヒー豆補充", subs: []}, {tag: "補充", name: "コーヒー水タンク入れ替え", subs: []}, {tag: "補充", name: "ポットのお湯確認補充", subs: []}, {tag: "補充", name: "たばこ補充", subs: []}, {tag: "補充", name: "コピー用紙確認補充", subs: []},
-            {tag: "定時業務", name: "コピー入金", subs: []}, {tag: "定時業務", name: "レシート・帳票整理", subs: []}, {tag: "定時業務", name: "レジ精算", subs: []}, {tag: "定時業務", name: "ストコン精算", subs: []}, {tag: "定時業務", name: "スタンプ日付変更", subs: []}, {tag: "定時業務", name: "ホット飲料ラベラ日付変更", subs: []}, {tag: "定時業務", name: "店控えスキャン", subs: []}, {tag: "定時業務", name: "納品用台車準備", subs: []}, {tag: "定時業務", name: "切手ファイル整理", subs: []}, {tag: "定時業務", name: "募金入金", subs: []},
-            {tag: "前出しフェイスアップ", name: "米飯前だし", subs: []}, {tag: "前出しフェイスアップ", name: "パン前だし", subs: []}, {tag: "前出しフェイスアップ", name: "デザート・半生菓子前だし", subs: []}, {tag: "前出しフェイスアップ", name: "サンドイッチ・調理麺前だし", subs: []}, {tag: "前出しフェイスアップ", name: "サラダ・パスタ前だし", subs: []}, {tag: "前出しフェイスアップ", name: "チョコレート売り場前だし", subs: []}, {tag: "前出しフェイスアップ", name: "スナック菓子売り場前だし", subs: []}, {tag: "前出しフェイスアップ", name: "カップ麺売り場前出し", subs: []}, {tag: "前出しフェイスアップ", name: "スープ売り場前だし", subs: []}, {tag: "前出しフェイスアップ", name: "日用品前だし", subs: []},
-            {tag: "品出し", name: "ホット飲料品出し", subs: []}, {tag: "品出し", name: "栄養ドリンク品出し", subs: []}, {tag: "品出し", name: "チルド飲料品出し", subs: []}, {tag: "品出し", name: "アイスカップ補充", subs: []}, {tag: "品出し", name: "水補充", subs: []}, {tag: "品出し", name: "常温水補充", subs: []},
-            {tag: "商品撤去", name: "廃棄チェック日付管理商品", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )11", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )14", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )18", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )21", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )24", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )2", subs: []}, {tag: "商品撤去", name: "廃棄チェック( )5", subs: []}, {tag: "商品撤去", name: "廃棄ダブルチェック", subs: []}, {tag: "商品撤去", name: "NBデザート廃棄チェック", subs: []}, {tag: "商品撤去", name: "チルド飲料廃棄チェック", subs: []}, {tag: "商品撤去", name: "惣菜廃棄チェック", subs: []}, {tag: "商品撤去", name: "島ゴンドラ鮮度チェック", subs: []}, {tag: "商品撤去", name: "島ゴンドラ撤去値下げ", subs: []}, {tag: "商品撤去", name: "値引きシール貼り日付管理商品", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )11", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )14", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )18", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )21", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )24", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )2", subs: []}, {tag: "商品撤去", name: "値引きシール貼り( )5", subs: []}, {tag: "商品撤去", name: "値引きシール貼りパン", subs: []}, {tag: "商品撤去", name: "値引きシール貼りデザート", subs: []}, {tag: "商品撤去", name: "値引きシールダブルチェック", subs: []}, {tag: "商品撤去", name: "新聞返品", subs: []}, {tag: "商品撤去", name: "雑誌返品", subs: []}, {tag: "商品撤去", name: "指定返品", subs: []}, {tag: "商品撤去", name: "未登録商品撤去", subs: []},
-            {tag: "納品", name: "山崎パン1便", subs: []}, {tag: "納品", name: "山崎パン2便", subs: []}, {tag: "納品", name: "センター1便", subs: []}, {tag: "納品", name: "センター2便", subs: []}, {tag: "納品", name: "用度品発注カードつける", subs: []}, {tag: "納品", name: "センター3便", subs: []}, {tag: "納品", name: "たばこ納品検品", subs: []}, {tag: "納品", name: "たばこ品切れチェック", subs: []}, {tag: "納品", name: "冷凍便納品(売り場)", subs: []}, {tag: "納品", name: "冷凍便納品(カウンター内)", subs: []}, {tag: "納品", name: "新聞納品", subs: []}, {tag: "納品", name: "雑誌納品", subs: []}, {tag: "納品", name: "常温便納品(売り場)", subs: []}, {tag: "納品", name: "お菓子開封作業(カウンター内)", subs: []}, {tag: "納品", name: "単品カードチェック", subs: []}, {tag: "納品", name: "陳列位置登録", subs: []},
-            {tag: "週一業務", name: "Pエンド展開", subs: []}, {tag: "週一業務", name: "Pエンド撤去", subs: []}, {tag: "週一業務", name: "アイキャッチPOP撤去", subs: []}, {tag: "週一業務", name: "アイキャッチPOPつける", subs: []}, {tag: "週一業務", name: "販促物撤去", subs: []}, {tag: "週一業務", name: "販促物撤去ダブルチェック", subs: []}, {tag: "週一業務", name: "販促物つける", subs: []}, {tag: "週一業務", name: "販促物つけるダブルチェック", subs: []}, {tag: "週一業務", name: "クーポン対象商品切り抜き", subs: []}, {tag: "週一業務", name: "販促物仕分け", subs: []},
-            {tag: "整理整頓", name: "スタッフドリンク整理", subs: []}, {tag: "整理整頓", name: "バックカウンター整理整頓", subs: []},
-            {tag: "清掃", name: "トイレチェック", subs: []}, {tag: "清掃", name: "トイレ清掃", subs: []}, {tag: "清掃", name: "床清掃", subs: []}, {tag: "清掃", name: "FF什器拭き掃除", subs: []}, {tag: "清掃", name: "ホッターズ什器清掃", subs: []}, {tag: "清掃", name: "常温什器清掃", subs: []}, {tag: "清掃", name: "スチーマー什器清掃", subs: []}, {tag: "清掃", name: "コーヒーマシンカス捨て", subs: []}, {tag: "清掃", name: "コーヒーマシン清掃", subs: []}, {tag: "清掃", name: "電子レンジ清掃", subs: []}, {tag: "清掃", name: "レジカウンター清掃", subs: []}, {tag: "清掃", name: "ゴミ出し", subs: []}, {tag: "清掃", name: "かご清掃", subs: []}, {tag: "清掃", name: "フィルター清掃", subs: []}, {tag: "清掃", name: "ゴンドラ清掃", subs: []}, {tag: "清掃", name: "たばこ棚清掃", subs: []}, {tag: "清掃", name: "ATM・コピー機清掃", subs: []}, {tag: "清掃", name: "フライヤー清掃", subs: []}, {tag: "清掃", name: "フライヤー清掃周辺清掃", subs: []}, {tag: "清掃", name: "換気扇清掃", subs: []}, {tag: "清掃", name: "駐車場清掃 (ゴミ拾 い)", subs: []}
-        ];
-
-        // 初回ロード時、もしローカルストレージにデータがなければ自動でIDを付与してセットする
+        // タスクデータの読み込み
         let tasks = JSON.parse(localStorage.getItem('ws_tasks_master'));
-        if (!tasks || tasks.length <= 1) {
-            tasks = initialTasks.map((t, index) => ({ id: Date.now() + index, ...t }));
+        if (!tasks || tasks.length === 0) {
+            tasks = [
+                { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
+            ];
             localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
         }
 
@@ -59,26 +62,51 @@
             render();
         }
 
+        function changeSort(sortVal) {
+            currentSort = sortVal;
+            render();
+        }
+
         function render() {
-            // タグ一覧の生成
-            const tags = ['すべて', ...new Set(tasks.map(t => t.tag || 'その他'))];
+            // 既存の全タグリストを抽出
+            const allTags = [...new Set(tasks.map(t => t.tag || 'その他'))];
+            
+            // タグフィルターボタンの生成
             const filterContainer = document.getElementById('filter-buttons');
-            filterContainer.innerHTML = tags.filter(t => t !== 'すべて').map(t => `
-                <button onclick="filterTasks('${t}')" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-bold whitespace-nowrap">${t}</button>
+            filterContainer.innerHTML = allTags.map(t => `
+                <button onclick="filterTasks('${t}')" class="px-3 py-1 ${currentFilter === t ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'} rounded-full text-sm font-bold whitespace-nowrap">${t}</button>
             `).join('');
 
-            // タスクの絞り込み表示
-            const filteredTasks = currentFilter === 'すべて' ? tasks : tasks.filter(t => (t.tag || 'その他') === currentFilter);
+            // datalist（タグ選択用候補）の更新
+            const datalist = document.getElementById('tag-suggestions');
+            datalist.innerHTML = allTags.map(t => `<option value="${t}">`).join('');
+
+            // 絞り込み
+            let filteredTasks = currentFilter === 'すべて' ? [...tasks] : tasks.filter(t => (t.tag || 'その他') === currentFilter);
+
+            // 並び替え処理
+            filteredTasks.sort((a, b) => {
+                if (currentSort === 'name_asc') {
+                    return (a.name || "").localeCompare(b.name || "", 'ja');
+                } else if (currentSort === 'name_desc') {
+                    return (b.name || "").localeCompare(a.name || "", 'ja');
+                } else if (currentSort === 'date_asc') {
+                    return (a.id || 0) - (b.id || 0);
+                } else { // date_desc (デフォルト)
+                    return (b.id || 0) - (a.id || 0);
+                }
+            });
+
             const list = document.getElementById('task-list');
             
             list.innerHTML = filteredTasks.map(t => `
                 <div class="border rounded-lg p-4 space-y-3 bg-slate-50">
                     <div class="flex gap-2 items-center">
                         <input value="${t.name}" onchange="updateTask(${t.id}, 'name', this.value)" class="font-bold text-lg flex-1 bg-transparent border-b border-transparent focus:border-blue-500 outline-none">
-                        <input list="tag-suggestions" value="${t.tag || ''}" onchange="updateTask(${t.id}, 'tag', this.value)" class="w-28 text-xs font-bold text-blue-600 bg-white border px-2 py-1 rounded border-blue-200 outline-none">
-                        <datalist id="tag-suggestions">
-                            ${tags.filter(tag => tag !== 'すべて').map(tag => `<option value="${tag}">`).join('')}
-                        </datalist>
+                        
+                        <!-- 既存のタグを選択可能にするため datalist を紐付け -->
+                        <input list="tag-suggestions" value="${t.tag || ''}" onchange="updateTask(${t.id}, 'tag', this.value)" placeholder="タグを選択・入力" class="w-32 text-xs font-bold text-blue-600 bg-white border px-2 py-1 rounded border-blue-200 outline-none">
+                        
                         <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-red-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </div>
                     <div class="ml-6 space-y-2">
@@ -100,11 +128,13 @@
         }
 
         function addTask() {
-            tasks.push({ id: Date.now(), name: "新規タスク", tag: "その他", subs: ["詳細項目1"] });
+            // 新規作成したタスクを配列の「先頭（一番上）」に追加
+            const newTask = { id: Date.now(), name: "新規タスク", tag: "その他", subs: ["実施確認", "完了確認"] };
+            tasks.unshift(newTask);
             render();
         }
 
-        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; render(); }
+        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; save(); }
         function updateSub(id, sIdx, val) { tasks.find(t => t.id === id).subs[sIdx] = val; save(); }
         function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); render(); }
         function addSub(id) { tasks.find(t => t.id === id).subs.push("新規項目"); render(); }
