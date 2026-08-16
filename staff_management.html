@@ -4,11 +4,207 @@
     <meta charset="UTF-8">
     <title>スタッフ管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body class="bg-slate-100 p-8">
-    <div class="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow">
-        <h1 class="text-2xl font-bold mb-4">スタッフ管理</h1>
-        <a href="dashboard.html" class="text-blue-600">ダッシュボードへ戻る</a>
+<body class="bg-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-slate-800">スタッフ管理</h2>
+            <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
+        </div>
+
+        <!-- アクションバー -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
+            <span id="store-label" class="font-bold text-slate-700 text-sm">スタッフ一覧</span>
+            <button onclick="openAddModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
+                <i data-lucide="plus" class="w-4 h-4"></i> 新規スタッフ追加
+            </button>
+        </div>
+
+        <!-- スタッフ一覧テーブル -->
+        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-50 border-b text-slate-500 text-xs font-bold">
+                        <th class="p-4">従業員番号</th>
+                        <th class="p-4">名前</th>
+                        <th class="p-4">所属店舗名</th>
+                        <th class="p-4">備考</th>
+                        <th class="p-4 text-right">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="staff-table-body" class="divide-y text-sm text-slate-700">
+                    <!-- 動的に生成されます -->
+                </tbody>
+            </table>
+        </div>
     </div>
+
+    <!-- スタッフ追加・編集モーダル -->
+    <div id="staff-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
+            <h3 id="modal-title" class="font-bold text-lg text-slate-800">新規スタッフ追加</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">従業員番号</label>
+                    <input type="text" id="staff-id-input" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 001">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">名前</label>
+                    <input type="text" id="staff-name-input" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 山田 太郎">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">所属店舗名</label>
+                    <select id="staff-store-input" class="w-full p-2 border rounded-lg font-bold bg-slate-50">
+                        <!-- 動的に生成されます -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">備考</label>
+                    <input type="text" id="staff-note-input" class="w-full p-2 border rounded-lg font-bold" placeholder="例: オーナー / 早朝メイン 等">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
+                <button onclick="saveStaff()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">保存する</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // 1. 店舗マスターの取得
+        const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [
+            { id: "store_1", name: "1号店 (本店)" }
+        ];
+        const defaultStoreName = storesMaster[0].name;
+
+        // 2. スタッフデータの初期化 (LocalStorage)
+        let staffList = JSON.parse(localStorage.getItem('ws_staff_list'));
+        if (!staffList || staffList.length === 0) {
+            staffList = [
+                { uniqueId: 1, empId: "EMP001", name: "オーナー", store: defaultStoreName, note: "オーナー" },
+                { uniqueId: 2, empId: "EMP002", name: "マネージャー", store: defaultStoreName, note: "マネージャー" },
+                { uniqueId: 3, empId: "EMP003", name: "店長", store: defaultStoreName, note: "店長" },
+                { uniqueId: 4, empId: "EMP004", name: "スタッフ1", store: defaultStoreName, note: "スタッフ" },
+                { uniqueId: 5, empId: "EMP005", name: "スタッフ2", store: defaultStoreName, note: "スタッフ" },
+                { uniqueId: 6, empId: "EMP006", name: "スタッフ3", store: defaultStoreName, note: "スタッフ" },
+                { uniqueId: 7, empId: "EMP007", name: "スタッフ4", store: defaultStoreName, note: "スタッフ" },
+                { uniqueId: 8, empId: "EMP008", name: "スタッフ5", store: defaultStoreName, note: "スタッフ" },
+            ];
+            localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
+        }
+
+        let editingUniqueId = null;
+
+        function saveStaffToStorage() {
+            localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
+        }
+
+        function renderStoreOptions() {
+            const select = document.getElementById('staff-store-input');
+            select.innerHTML = storesMaster.map(s => `
+                <option value="${s.name}">${s.name}</option>
+            `).join('');
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('staff-table-body');
+            if (staffList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400">登録されているスタッフがいません。</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = staffList.map(s => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4 font-mono font-bold text-slate-600">${s.empId || ''}</td>
+                    <td class="p-4 font-bold text-slate-800">${s.name || ''}</td>
+                    <td class="p-4"><span class="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-bold">${s.store || ''}</span></td>
+                    <td class="p-4 text-slate-500">${s.note || ''}</td>
+                    <td class="p-4 text-right space-x-2">
+                        <button onclick="openEditModal(${s.uniqueId})" class="text-blue-600 hover:text-blue-800 font-bold text-xs bg-blue-50 px-2.5 py-1.5 rounded">編集</button>
+                        <button onclick="deleteStaff(${s.uniqueId})" class="text-red-600 hover:text-red-800 font-bold text-xs bg-red-50 px-2.5 py-1.5 rounded">削除</button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function openAddModal() {
+            editingUniqueId = null;
+            document.getElementById('modal-title').innerText = "新規スタッフ追加";
+            document.getElementById('staff-id-input').value = "EMP" + String(Date.now()).slice(-3);
+            document.getElementById('staff-name-input').value = "";
+            document.getElementById('staff-note-input').value = "";
+            renderStoreOptions();
+            document.getElementById('staff-modal').classList.remove('hidden');
+        }
+
+        function openEditModal(uniqueId) {
+            const staff = staffList.find(s => s.uniqueId === uniqueId);
+            if (!staff) return;
+            editingUniqueId = uniqueId;
+            document.getElementById('modal-title').innerText = "スタッフ情報の編集";
+            document.getElementById('staff-id-input').value = staff.empId;
+            document.getElementById('staff-name-input').value = staff.name;
+            document.getElementById('staff-note-input').value = staff.note;
+            renderStoreOptions();
+            document.getElementById('staff-store-input').value = staff.store;
+            document.getElementById('staff-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('staff-modal').classList.add('hidden');
+        }
+
+        function saveStaff() {
+            const empId = document.getElementById('staff-id-input').value.trim();
+            const name = document.getElementById('staff-name-input').value.trim();
+            const store = document.getElementById('staff-store-input').value;
+            const note = document.getElementById('staff-note-input').value.trim();
+
+            if (!name) {
+                alert("スタッフの名前を入力してください。");
+                return;
+            }
+
+            if (editingUniqueId !== null) {
+                // 編集
+                const staff = staffList.find(s => s.uniqueId === editingUniqueId);
+                if (staff) {
+                    staff.empId = empId;
+                    staff.name = name;
+                    staff.store = store;
+                    staff.note = note;
+                }
+            } else {
+                // 新規追加
+                const newStaff = {
+                    uniqueId: Date.now(),
+                    empId: empId || ("EMP" + Math.floor(Math.random() * 900 + 100)),
+                    name: name,
+                    store: store,
+                    note: note
+                };
+                staffList.push(newStaff);
+            }
+
+            saveStaffToStorage();
+            closeModal();
+            renderTable();
+        }
+
+        function deleteStaff(uniqueId) {
+            if (confirm("このスタッフを削除してもよろしいですか？")) {
+                staffList = staffList.filter(s => s.uniqueId !== uniqueId);
+                saveStaffToStorage();
+                renderTable();
+            }
+        }
+
+        renderTable();
+    </script>
 </body>
 </html>
