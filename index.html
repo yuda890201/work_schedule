@@ -18,7 +18,8 @@
             </div>
             <div class="flex items-center gap-4">
                 <span id="store-name-display" class="text-xs bg-blue-600 px-2.5 py-1 rounded-full font-bold"></span>
-                <div id="global-timer" class="font-mono text-emerald-400 font-bold text-xl">00:00:00</div>
+                <!-- 現在時刻をリアルタイム表示 -->
+                <div id="realtime-clock" class="font-mono text-emerald-400 font-bold text-xl">00:00:00</div>
             </div>
         </div>
     </header>
@@ -58,7 +59,7 @@
         // スタッフリストの読み込み
         const staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
 
-        // タスクマスター（サブタスク情報を引くため）
+        // タスクマスター
         const rawMasterTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const taskMasterMap = {};
         rawMasterTasks.forEach(t => { 
@@ -89,20 +90,35 @@
         let currentShiftKey = Object.keys(SHIFT_DATA)[0];
         let currentShift = SHIFT_DATA[currentShiftKey];
 
+        // 状態管理（各レジのフェーズ開始時間と、タスクごとの所要時間を記録する object を追加）
         let state = { 
             r1: [], r2: [], 
+            r1Times: {}, r2Times: {}, // タスク名: 所要時間(秒)
+            r1StartTime: Date.now(), // レジごとの現在フェーズ開始時刻
+            r2StartTime: Date.now(),
             r1Staff: staffList.length > 0 ? staffList[0].name : "未選択",
             r2Staff: staffList.length > 1 ? staffList[1].name : "未選択",
-            currentHour: currentShift.start, 
-            activeTask: null, 
-            activeReg: null 
+            currentHour: currentShift.start 
         }; 
-        let phaseStartTime = Date.now();
 
+        // リアルタイムクロック & 各レジのタスクタイマー更新
         setInterval(() => {
-            const elapsed = Math.floor((Date.now() - phaseStartTime) / 1000);
-            document.getElementById('global-timer').innerText = new Date(elapsed * 1000).toISOString().substr(11, 8);
+            // 1. 上部ヘッダーの現在時刻リアルタイム表示
+            const now = new Date();
+            document.getElementById('realtime-clock').innerText = now.toTimeString().split(' ')[0];
+
+            // 2. 各レジの現フェーズ枠内にあるタイマーを更新
+            updateRegTimer('r1', state.r1StartTime);
+            updateRegTimer('r2', state.r2StartTime);
         }, 1000);
+
+        function updateRegTimer(regKey, startTime) {
+            const timerEl = document.getElementById(`${regKey}-timer`);
+            if (timerEl) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                timerEl.innerText = new Date(elapsed * 1000).toISOString().substr(11, 8);
+            }
+        }
 
         function resetShift() {
             currentShiftKey = document.getElementById('shift-select').value;
@@ -110,7 +126,10 @@
             state.currentHour = currentShift.start;
             state.r1 = [];
             state.r2 = [];
-            phaseStartTime = Date.now();
+            state.r1Times = {};
+            state.r2Times = {};
+            state.r1StartTime = Date.now();
+            state.r2StartTime = Date.now();
             renderApp();
         }
 
@@ -130,8 +149,11 @@
             
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
             const currentTasks = regTasksByHour[state.currentHour] || [];
+            const timesMap = regKey === 'r1' ? state.r1Times : state.r2Times;
+            const startTime = regKey === 'r1' ? state.r1StartTime : state.r2StartTime;
+            const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
+            const initialElapsedStr = new Date(initialElapsed * 1000).toISOString().substr(11, 8);
 
-            // 担当者選択の表示を「名前 / 所属店舗名」に変更
             const staffOptions = staffList.map(s => `
                 <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} / ${s.store || '店舗未設定'}</option>
             `).join('');
@@ -155,38 +177,61 @@
                         </select>
                     </div>
 
-                    <div class="p-4 bg-slate-900 rounded-xl text-white">
-                        <p class="text-xs text-slate-400">現在のフェーズ</p>
-                        <p class="text-2xl font-bold font-mono">${state.currentHour}:00〜</p>
+                    <div class="p-4 bg-slate-900 rounded-xl text-white flex justify-between items-center">
+                        <div>
+                            <p class="text-xs text-slate-400">現在のフェーズ</p>
+                            <p class="text-2xl font-bold font-mono">${state.currentHour}:00〜</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-slate-400">経過時間</p>
+                            <p id="${regKey}-timer" class="text-xl font-bold font-mono text-emerald-400">${initialElapsedStr}</p>
+                        </div>
                     </div>
 
                     ${currentTasks.length === 0 ? '<p class="text-xs text-slate-400 py-4">この時間の割当タスクはありません</p>' : ''}
 
-                    ${currentTasks.map(name => `
-                        <button onclick="handleTaskClick('${regKey}', '${name}')" 
-                            class="w-full p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${state[regKey].includes(name) ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-800 hover:border-blue-400'}">
-                            ${name}
-                            ${state[regKey].includes(name) ? '<i data-lucide="check-circle" class="text-emerald-600"></i>' : ''}
-                        </button>
-                    `).join('')}
+                    ${currentTasks.map(name => {
+                        const isCompleted = state[regKey].includes(name);
+                        const durationSec = timesMap[name];
+                        let timeDisplay = '';
+                        if (isCompleted && durationSec !== undefined) {
+                            const m = Math.floor(durationSec / 60);
+                            const s = durationSec % 60;
+                            timeDisplay = `<span class="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-1 rounded">所要時間: ${m > 0 ? m + '分' : ''}${s}秒</span>`;
+                        }
+
+                        return `
+                            <button onclick="handleTaskClick('${regKey}', '${name}')" 
+                                class="w-full p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${isCompleted ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-800 hover:border-blue-400'}">
+                                <span>${name}</span>
+                                <div class="flex items-center gap-2">
+                                    ${timeDisplay}
+                                    ${isCompleted ? '<i data-lucide="check-circle" class="text-emerald-600"></i>' : ''}
+                                </div>
+                            </button>
+                        `;
+                    }).join('')}
 
                     ${currentTasks.length > 0 && currentTasks.every(name => state[regKey].includes(name)) ? 
-                        `<button onclick="nextHour()" class="w-full p-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 animate-bounce">次の時間へ進む →</button>` 
+                        `<button onclick="nextHour('${regKey}')" class="w-full p-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 animate-bounce">次の時間へ進む →</button>` 
                         : ''}
                 </div>
             `;
             lucide.createIcons();
         }
 
-        // すべてのタスククリックで必ずモーダルを表示（サブタスク未設定ならデフォルト項目を表示）
+        // タスククリック時の処理（モーダル表示前にクリック時刻を一時記憶、またはモーダル用データ準備）
+        let tempTaskClickInfo = null;
+
         function handleTaskClick(regKey, taskName) {
             const trimmedName = taskName.trim();
             let subs = taskMasterMap[trimmedName];
             
             if (!subs || !Array.isArray(subs) || subs.length === 0) {
-                subs = ["実施確認", "完了確認"]; // 未設定時のデフォルトサブタスク
+                subs = ["実施確認", "完了確認"];
             }
             
+            tempTaskClickInfo = { regKey, taskName, clickTime: Date.now() };
             openModal(regKey, taskName, subs);
         }
 
@@ -224,17 +269,26 @@
         }
 
         function confirmTask() {
-            if (!state[state.activeReg].includes(state.activeTask)) {
+            if (tempTaskClickInfo && !state[state.activeReg].includes(state.activeTask)) {
                 state[state.activeReg].push(state.activeTask);
+                // かかった時間を計算（秒単位）
+                const duration = Math.floor((Date.now() - tempTaskClickInfo.clickTime) / 1000);
+                if (state.activeReg === 'r1') {
+                    state.r1Times[state.activeTask] = duration;
+                } else {
+                    state.r2Times[state.activeTask] = duration;
+                }
             }
             document.getElementById('task-modal').classList.add('hidden');
             renderApp();
         }
 
-        function nextHour() {
+        function nextHour(regKey) {
             if (state.currentHour < currentShift.end - 1) {
                 state.currentHour += 1;
-                phaseStartTime = Date.now();
+                // レジごとにフェーズ開始時刻をリセット
+                if (regKey === 'r1') state.r1StartTime = Date.now();
+                if (regKey === 'r2') state.r2StartTime = Date.now();
                 renderApp();
             } else {
                 alert("このシフトの最終時間です！お疲れ様でした。");
