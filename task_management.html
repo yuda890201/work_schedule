@@ -10,60 +10,113 @@
 
     <div class="max-w-3xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
-            <h2 class="text-2xl font-bold text-slate-800">タスク管理マスター</h2>
+            <h2 class="text-2xl font-bold text-slate-800">タスク管理マスター（クラウド同期）</h2>
             <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
         </div>
 
-        <!-- 絞り込みフィルター & 並べ替えバー -->
-        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-4">
-            <div class="flex gap-2 overflow-x-auto items-center">
-                <button onclick="filterTasks('すべて')" class="px-3 py-1 bg-slate-200 rounded-full text-sm font-bold whitespace-nowrap">すべて</button>
-                <div id="filter-buttons" class="flex gap-2"></div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-                <label class="text-xs font-bold text-slate-500">並び替え:</label>
-                <select id="sort-select" onchange="changeSort(this.value)" class="p-2 border rounded-lg text-xs font-bold bg-slate-50 text-slate-700">
-                    <option value="date_desc">作成日時（新しい順）</option>
-                    <option value="date_asc">作成日時（古い順）</option>
-                    <option value="name_asc">名前（昇順）</option>
-                    <option value="name_desc">名前（降順）</option>
-                </select>
-            </div>
+        <!-- ローディング表示 -->
+        <div id="loading" class="bg-white p-6 rounded-xl shadow-sm border text-center font-bold text-slate-500">
+            クラウドからタスクデータを読み込み中...
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border p-6">
-            <button onclick="addTask()" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 font-bold hover:border-blue-400 hover:text-blue-500 mb-6 flex items-center justify-center gap-2">
-                <i data-lucide="plus"></i> 新しいタスクを追加
-            </button>
-            <div id="task-list" class="space-y-4"></div>
+        <!-- メインコンテンツ（読込後に表示） -->
+        <div id="main-content" class="space-y-6 hidden">
+            <!-- 絞り込みフィルター & 並べ替えバー -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-4">
+                <div class="flex gap-2 overflow-x-auto items-center">
+                    <button onclick="filterTasks('すべて')" class="px-3 py-1 bg-slate-200 rounded-full text-sm font-bold whitespace-nowrap">すべて</button>
+                    <div id="filter-buttons" class="flex gap-2"></div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <label class="text-xs font-bold text-slate-500">並び替え:</label>
+                    <select id="sort-select" onchange="changeSort(this.value)" class="p-2 border rounded-lg text-xs font-bold bg-slate-50 text-slate-700">
+                        <option value="date_desc">作成日時（新しい順）</option>
+                        <option value="date_asc">作成日時（古い順）</option>
+                        <option value="name_asc">名前（昇順）</option>
+                        <option value="name_desc">名前（降順）</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <button onclick="addTask()" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 font-bold hover:border-blue-400 hover:text-blue-500 mb-6 flex items-center justify-center gap-2">
+                    <i data-lucide="plus"></i> 新しいタスクを追加
+                </button>
+                <div id="task-list" class="space-y-4"></div>
+            </div>
         </div>
     </div>
 
     <script>
         lucide.createIcons();
+
+        // ★ここにGASのウェブアプリURLを設定してください
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
+
+        let tasks = [];
         let currentFilter = 'すべて';
         let currentSort = 'date_desc';
 
-        // 1. タスクデータの読み込み
-        let tasks = JSON.parse(localStorage.getItem('ws_tasks_master'));
-        if (!tasks || tasks.length === 0) {
-            tasks = [
-                { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
-            ];
-            localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
+        // クラウドからタスクデータを取得
+        async function fetchTasksData() {
+            try {
+                const response = await fetch(`${GAS_API_URL}?sheet=tasks`);
+                const data = await response.json();
+                
+                if (Array.isArray(data) && data.length > 0) {
+                    // スプレッドシートから取得したデータはsubsが文字列化している場合があるため復元
+                    tasks = data.map(t => ({
+                        ...t,
+                        id: Number(t.id),
+                        subs: typeof t.subs === 'string' ? JSON.parse(t.subs || "[]") : (t.subs || [])
+                    }));
+                } else {
+                    tasks = [
+                        { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
+                    ];
+                    await saveTasksDataToCloud();
+                }
+            } catch (error) {
+                console.error("タスクデータ取得エラー:", error);
+                tasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
+                    { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
+                ];
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            render();
         }
 
-        // 2. 全店舗のシフトデータから「どのタスクがどのシフトに割り当てられているか」を走査・集計
+        // クラウドへタスクデータを保存
+        async function saveTasksDataToCloud() {
+            try {
+                // サブタスク配列をJSON文字列にして保存しやすくする
+                const payload = tasks.map(t => ({
+                    ...t,
+                    subs: JSON.stringify(t.subs)
+                }));
+
+                await fetch(GAS_API_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sheet: "tasks", action: "save", rows: payload })
+                });
+            } catch (error) {
+                console.error("タスクデータ保存エラー:", error);
+                alert("クラウドへの保存に失敗しました。");
+            }
+        }
+
+        // 各店舗のシフトからタスク割当状況を走査
         function getTaskAssignmentMap() {
-            const assignmentMap = {}; // { "タスク名": ["1号店: 朝シフト", "2号店: 昼シフト"] }
-            
-            // ローカルストレージから全店舗データを取得
+            const assignmentMap = {};
             const stores = JSON.parse(localStorage.getItem('ws_stores_master')) || [];
             stores.forEach(store => {
                 const shiftData = JSON.parse(localStorage.getItem(`ws_shifts_data_${store.id}`)) || {};
                 Object.values(shiftData).forEach(shift => {
                     if (shift && shift.tasks) {
-                        // r1, r2 または 旧構造のタスクをチェック
                         const checkAndAdd = (taskList) => {
                             if (Array.isArray(taskList)) {
                                 taskList.forEach(tName => {
@@ -75,10 +128,8 @@
                                 });
                             }
                         };
-
                         if (shift.tasks.r1) Object.values(shift.tasks.r1).forEach(checkAndAdd);
                         if (shift.tasks.r2) Object.values(shift.tasks.r2).forEach(checkAndAdd);
-                        // 旧構造対応
                         Object.values(shift.tasks).forEach(val => {
                             if (Array.isArray(val)) checkAndAdd(val);
                         });
@@ -98,23 +149,24 @@
             render();
         }
 
+        async function saveDataAndRender() {
+            render();
+            localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
+            await saveTasksDataToCloud();
+        }
+
         function render() {
-            // 既存の全タグリストを抽出
             const allTags = [...new Set(tasks.map(t => t.tag || 'その他'))];
             
-            // タグフィルターボタンの生成
             const filterContainer = document.getElementById('filter-buttons');
             filterContainer.innerHTML = allTags.map(t => `
                 <button onclick="filterTasks('${t}')" class="px-3 py-1 ${currentFilter === t ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'} rounded-full text-sm font-bold whitespace-nowrap">${t}</button>
             `).join('');
 
-            // シフト割当マップの取得
             const assignmentMap = getTaskAssignmentMap();
 
-            // 絞り込み
             let filteredTasks = currentFilter === 'すべて' ? [...tasks] : tasks.filter(t => (t.tag || 'その他') === currentFilter);
 
-            // 並び替え処理
             filteredTasks.sort((a, b) => {
                 if (currentSort === 'name_asc') {
                     return (a.name || "").localeCompare(b.name || "", 'ja');
@@ -122,7 +174,7 @@
                     return (b.name || "").localeCompare(a.name || "", 'ja');
                 } else if (currentSort === 'date_asc') {
                     return (a.id || 0) - (b.id || 0);
-                } else { // date_desc (デフォルト)
+                } else {
                     return (b.id || 0) - (a.id || 0);
                 }
             });
@@ -130,17 +182,14 @@
             const list = document.getElementById('task-list');
             
             list.innerHTML = filteredTasks.map(t => {
-                // 未編集（新規作成のまま）のタスクは赤色ハイライト
                 const isUnedited = t.name === "新規タスク";
                 const cardBg = isUnedited ? "bg-red-50 border-red-300" : "bg-slate-50 border-slate-200";
 
-                // 割当状況のバッジ生成
                 const assignedShifts = assignmentMap[t.name] || [];
                 const assignedHtml = assignedShifts.length > 0 
                     ? assignedShifts.map(s => `<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">${s}</span>`).join(' ')
                     : `<span class="text-slate-400 text-[10px]">どのシフトにも割り当てられていません</span>`;
 
-                // タグ選択用のセレクトボックスの選択肢HTML
                 const tagOptions = allTags.map(tag => `<option value="${tag}" ${t.tag === tag ? 'selected' : ''}>${tag}</option>`).join('');
 
                 return `
@@ -148,7 +197,6 @@
                         <div class="flex gap-2 items-center">
                             <input value="${t.name}" onchange="updateTask(${t.id}, 'name', this.value)" class="font-bold text-lg flex-1 bg-transparent border-b ${isUnedited ? 'border-red-400 text-red-700' : 'border-transparent'} focus:border-blue-500 outline-none" placeholder="タスク名を入力">
                             
-                            <!-- タグ選択用セレクトボックス（既存タグから確実に選べるように変更） -->
                             <select onchange="updateTask(${t.id}, 'tag', this.value)" class="text-xs font-bold text-blue-600 bg-white border px-2 py-1.5 rounded border-blue-200 outline-none">
                                 ${tagOptions}
                                 <option value="その他" ${!allTags.includes(t.tag) ? 'selected' : ''}>+ その他/新規</option>
@@ -157,7 +205,6 @@
                             <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-red-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
 
-                        <!-- 割り当てられているシフト枠の表示 -->
                         <div class="flex items-center gap-2 text-xs">
                             <span class="font-bold text-slate-500">割当シフト:</span>
                             <div class="flex flex-wrap gap-1">${assignedHtml}</div>
@@ -178,26 +225,25 @@
                     </div>
                 `;
             }).join('');
-            save();
             lucide.createIcons();
         }
 
         function addTask() {
             const newTask = { id: Date.now(), name: "新規タスク", tag: "FF", subs: ["実施確認", "完了確認"] };
-            tasks.push(newTask); // 配列の末尾に追加（並び替え機能で新しい順にすれば一番上に表示されます）
-            currentSort = 'date_desc'; // 新規追加したら新しい順表示に切り替え
+            tasks.push(newTask);
+            currentSort = 'date_desc';
             document.getElementById('sort-select').value = 'date_desc';
-            render();
+            saveDataAndRender();
         }
 
-        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; save(); render(); }
-        function updateSub(id, sIdx, val) { tasks.find(t => t.id === id).subs[sIdx] = val; save(); }
-        function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); render(); }
-        function addSub(id) { tasks.find(t => t.id === id).subs.push("新規項目"); render(); }
-        function deleteSub(id, sIdx) { tasks.find(t => t.id === id).subs.splice(sIdx, 1); render(); }
-        function save() { localStorage.setItem('ws_tasks_master', JSON.stringify(tasks)); }
+        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; saveDataAndRender(); }
+        function updateSub(id, sIdx, val) { tasks.find(t => t.id === id).subs[sIdx] = val; saveDataAndRender(); }
+        function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); saveDataAndRender(); }
+        function addSub(id) { tasks.find(t => t.id === id).subs.push("新規項目"); saveDataAndRender(); }
+        function deleteSub(id, sIdx) { tasks.find(t => t.id === id).subs.splice(sIdx, 1); saveDataAndRender(); }
 
-        render();
+        // 初期化実行
+        fetchTasksData();
     </script>
 </body>
 </html>
