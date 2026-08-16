@@ -9,7 +9,7 @@
 <body class="bg-slate-100 min-h-screen p-4 md:p-8">
 
     <div class="max-w-5xl mx-auto space-y-6">
-        <!-- ヘルパー＆店舗切替バー -->
+        <!-- ヘルパー＆店舗切替・編集バー -->
         <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
                 <span class="font-bold text-slate-700 text-sm">対象店舗:</span>
@@ -17,9 +17,14 @@
                     <!-- 動的に生成されます -->
                 </select>
             </div>
-            <button onclick="openStoreModal()" class="px-4 py-2 bg-slate-800 text-white font-bold rounded-lg text-sm hover:bg-slate-700 flex items-center gap-1">
-                <i data-lucide="plus" class="w-4 h-4"></i> 新規店舗追加
-            </button>
+            <div class="flex items-center gap-2">
+                <button onclick="openStoreModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 新規店舗追加
+                </button>
+                <button onclick="openEditStoreModal()" class="px-3 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 flex items-center gap-1">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i> 店舗編集
+                </button>
+            </div>
         </div>
 
         <!-- メインコンテンツ（各画面へのリンクカード） -->
@@ -70,17 +75,17 @@
         </div>
     </div>
 
-    <!-- 店舗追加モーダル -->
+    <!-- 店舗追加・編集モーダル -->
     <div id="store-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
-            <h3 class="font-bold text-lg text-slate-800">新規店舗の追加</h3>
+            <h3 id="store-modal-title" class="font-bold text-lg text-slate-800">新規店舗の追加</h3>
             <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1">店舗名（例: 博多駅前店）</label>
-                <input type="text" id="new-store-name" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 博多駅前店">
+                <input type="text" id="store-name-input" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 博多駅前店">
             </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeStoreModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
-                <button onclick="saveNewStore()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">追加する</button>
+                <button onclick="saveStore()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">保存する</button>
             </div>
         </div>
     </div>
@@ -93,6 +98,7 @@
             { id: "store_1", name: "1号店 (本店)" }
         ];
         let currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
+        let isStoreEditing = false;
 
         function renderStoreSelect() {
             const select = document.getElementById('store-select');
@@ -107,7 +113,18 @@
         }
 
         function openStoreModal() {
-            document.getElementById('new-store-name').value = "";
+            isStoreEditing = false;
+            document.getElementById('store-modal-title').innerText = "新規店舗の追加";
+            document.getElementById('store-name-input').value = "";
+            document.getElementById('store-modal').classList.remove('hidden');
+        }
+
+        function openEditStoreModal() {
+            const currentStore = storesMaster.find(s => s.id === currentStoreId);
+            if (!currentStore) return;
+            isStoreEditing = true;
+            document.getElementById('store-modal-title').innerText = "店舗名の編集";
+            document.getElementById('store-name-input').value = currentStore.name;
             document.getElementById('store-modal').classList.remove('hidden');
         }
 
@@ -115,17 +132,26 @@
             document.getElementById('store-modal').classList.add('hidden');
         }
 
-        function saveNewStore() {
-            const name = document.getElementById('new-store-name').value.trim();
+        function saveStore() {
+            const name = document.getElementById('store-name-input').value.trim();
             if (!name) {
                 alert("店舗名を入力してください");
                 return;
             }
-            const newId = 'store_' + Date.now();
-            storesMaster.push({ id: newId, name: name });
+
+            if (isStoreEditing) {
+                const currentStore = storesMaster.find(s => s.id === currentStoreId);
+                if (currentStore) {
+                    currentStore.name = name;
+                }
+            } else {
+                const newId = 'store_' + Date.now();
+                storesMaster.push({ id: newId, name: name });
+                currentStoreId = newId;
+                localStorage.setItem('ws_current_store_id', newId);
+            }
+
             localStorage.setItem('ws_stores_master', JSON.stringify(storesMaster));
-            currentStoreId = newId;
-            localStorage.setItem('ws_current_store_id', newId);
             closeStoreModal();
             renderStoreSelect();
         }
