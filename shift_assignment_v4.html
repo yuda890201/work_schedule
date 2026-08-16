@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シフト割当管理 - 連携版</title>
+    <title>シフト割当管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -11,24 +11,66 @@
     <div class="max-w-7xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
             <h2 class="text-2xl font-bold text-slate-800">シフト割当管理</h2>
-            <button onclick="window.location.href='index.html'" class="text-slate-500 hover:text-slate-900">入力画面へ戻る</button>
+            <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
+        </div>
+
+        <!-- シフト管理バー（追加・選択・削除） -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <label class="font-bold text-slate-700 text-sm">対象シフト:</label>
+                <select id="shift-select" onchange="changeShift(this.value)" class="p-2 border rounded-lg font-bold bg-slate-50 text-slate-800">
+                    <!-- 動的に生成されます -->
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openShiftModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 新しいシフト枠を追加
+                </button>
+                <button onclick="deleteCurrentShift()" class="px-3 py-2 bg-red-50 text-red-600 font-bold rounded-lg text-sm hover:bg-red-100 border border-red-200">
+                    現在のシフトを削除
+                </button>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- 左側：タスクマスター（LocalStorageから動的読み込み） -->
-            <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-150px)] flex flex-col">
-                <h3 class="font-bold mb-4 text-slate-700">タスクマスター（登録データ連動）</h3>
+            <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
+                <h3 class="font-bold mb-4 text-slate-700">タスクマスター</h3>
                 <!-- カテゴリタブ -->
-                <div class="flex gap-2 mb-4 overflow-x-auto pb-2" id="category-tabs"></div>
+                <div class="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0" id="category-tabs"></div>
                 <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
             </div>
 
             <!-- 右側：時間割配置 -->
-            <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-150px)] flex flex-col">
-                <select id="shift-select" class="p-2 border rounded-lg font-bold mb-4">
-                    <option value="s1">朝シフト (8:00〜12:00)</option>
-                </select>
-                <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1"></div>
+            <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
+                <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1 pr-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- シフト追加モーダル -->
+    <div id="shift-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
+            <h3 class="font-bold text-lg text-slate-800">新規シフト枠の追加</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">シフト名（例: 遅番シフト）</label>
+                    <input type="text" id="new-shift-name" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 遅番シフト">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">開始時間 (時)</label>
+                        <input type="number" id="new-shift-start" class="w-full p-2 border rounded-lg font-bold" value="13" min="0" max="23">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">終了時間 (時)</label>
+                        <input type="number" id="new-shift-end" class="w-full p-2 border rounded-lg font-bold" value="17" min="1" max="24">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeShiftModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
+                <button onclick="saveNewShift()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">追加する</button>
             </div>
         </div>
     </div>
@@ -36,41 +78,51 @@
     <script>
         lucide.createIcons();
 
-        // 1. ローカルストレージからタスク管理マスターのデータを取得する
-        // データがない場合の初期フォールバックとしてダッシュボード用のサンプルを入れておく
-        let rawTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
-            { id: 1, name: "トイレ清掃", tag: "清掃", subs: [] },
-            { id: 2, name: "レジ点検", tag: "レジ", subs: [] }
-        ];
-
-        // 2. 取得したタスクデータをタグごとに自動グループ化する
+        // 1. タスクマスターの読み込み
+        let rawTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const TASKS_MASTER = {};
         rawTasks.forEach(t => {
             const tag = t.tag || "その他";
-            if (!TASKS_MASTER[tag]) {
-                TASKS_MASTER[tag] = [];
-            }
+            if (!TASKS_MASTER[tag]) TASKS_MASTER[tag] = [];
             TASKS_MASTER[tag].push(t.name);
         });
 
-        // タグが存在しない場合の安全対策
         const categories = Object.keys(TASKS_MASTER);
         let activeCat = categories.length > 0 ? categories[0] : "その他";
-        let assignment = { s1: { 8: [], 9: [], 10: [], 11: [] } };
+
+        // 2. シフトデータの管理 (LocalStorage保存)
+        let shiftsData = JSON.parse(localStorage.getItem('ws_shifts_data')) || {
+            "s1": { name: "朝シフト (8:00〜12:00)", start: 8, end: 12, tasks: { 8: [], 9: [], 10: [], 11: [] } }
+        };
+        let currentShiftKey = Object.keys(shiftsData)[0] || "s1";
+
+        function saveShifts() {
+            localStorage.setItem('ws_shifts_data', JSON.stringify(shiftsData));
+        }
+
+        function renderShiftSelect() {
+            const select = document.getElementById('shift-select');
+            select.innerHTML = Object.keys(shiftsData).map(k => `
+                <option value="${k}" ${k === currentShiftKey ? 'selected' : ''}>${shiftsData[k].name}</option>
+            `).join('');
+        }
+
+        function changeShift(key) {
+            currentShiftKey = key;
+            renderBoard();
+        }
 
         function renderMaster() {
             const tabs = document.getElementById('category-tabs');
             const catKeys = Object.keys(TASKS_MASTER);
             
             if (catKeys.length === 0) {
-                tabs.innerHTML = '<span class="text-xs text-slate-400">タスクが登録されていません。「タスク管理」画面から登録してください。</span>';
+                tabs.innerHTML = '<span class="text-xs text-slate-400">タスクが登録されていません。</span>';
                 document.getElementById('master-tasks').innerHTML = '';
                 return;
             }
 
-            if (!catKeys.includes(activeCat)) {
-                activeCat = catKeys[0];
-            }
+            if (!catKeys.includes(activeCat)) activeCat = catKeys[0];
 
             tabs.innerHTML = catKeys.map(c => `
                 <button onclick="activeCat='${c}'; renderMaster()" class="px-3 py-1 text-sm rounded-full ${activeCat === c ? 'bg-blue-600 text-white' : 'bg-slate-200'} font-bold whitespace-nowrap">
@@ -82,7 +134,7 @@
             const currentTasks = TASKS_MASTER[activeCat] || [];
             
             master.innerHTML = currentTasks.map(t => `
-                <div draggable="true" ondragstart="handleDragStart(event, '${t}')" class="p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-grab font-bold text-slate-700 hover:bg-blue-100 flex justify-between items-center">
+                <div draggable="true" ondragstart="handleDragStart(event, '${t}')" class="p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-grab font-bold text-slate-700 hover:bg-blue-100 flex justify-between items-center text-sm">
                     ${t}
                 </div>
             `).join('');
@@ -91,26 +143,91 @@
         }
 
         function renderBoard() {
+            renderShiftSelect();
             const board = document.getElementById('assignment-board');
-            board.innerHTML = [8, 9, 10, 11].map(h => `
-                <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 min-h-[80px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h})">
-                    <div class="flex justify-between items-center mb-2">
-                        <h4 class="text-xs font-bold text-slate-400">${h}:00〜</h4>
+            const currentShift = shiftsData[currentShiftKey];
+            
+            if (!currentShift) return;
+
+            let hoursHtml = '';
+            for (let h = currentShift.start; h < currentShift.end; h++) {
+                if (!currentShift.tasks[h]) currentShift.tasks[h] = [];
+                hoursHtml += `
+                    <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 min-h-[80px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h})">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-xs font-bold text-slate-400">${h}:00〜</h4>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            ${currentShift.tasks[h].map(t => `
+                                <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                                    ${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-600" onclick="removeTask(${h}, '${t}')"></i>
+                                </span>
+                            `).join('')}
+                        </div>
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                        ${assignment['s1'][h].map(t => `
-                            <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer" onclick="removeTask(${h}, '${t}')"></i></span>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }
+            board.innerHTML = hoursHtml;
             lucide.createIcons();
         }
 
         function handleDragStart(e, task) { e.dataTransfer.setData('text/plain', task); }
-        function handleDrop(e, hour) { addTask(hour, e.dataTransfer.getData('text/plain')); }
-        function addTask(hour, task) { if(!assignment['s1'][hour].includes(task)) { assignment['s1'][hour].push(task); renderBoard(); } }
-        function removeTask(hour, task) { assignment['s1'][hour] = assignment['s1'][hour].filter(t => t !== task); renderBoard(); }
+        function handleDrop(e, hour) { 
+            const task = e.dataTransfer.getData('text/plain');
+            const tasksAtHour = shiftsData[currentShiftKey].tasks[hour];
+            if (!tasksAtHour.includes(task)) {
+                tasksAtHour.push(task);
+                saveShifts();
+                renderBoard();
+            }
+        }
+        function removeTask(hour, task) {
+            const tasksAtHour = shiftsData[currentShiftKey].tasks[hour];
+            shiftsData[currentShiftKey].tasks[hour] = tasksAtHour.filter(t => t !== task);
+            saveShifts();
+            renderBoard();
+        }
+
+        // シフト枠追加・削除モーダル制御
+        function openShiftModal() { document.getElementById('shift-modal').classList.remove('hidden'); }
+        function closeShiftModal() { document.getElementById('shift-modal').classList.add('hidden'); }
+
+        function saveNewShift() {
+            const name = document.getElementById('new-shift-name').value.trim();
+            const start = parseInt(document.getElementById('new-shift-start').value);
+            const end = parseInt(document.getElementById('new-shift-end').value);
+
+            if (!name || isNaN(start) || isNaN(end) || start >= end) {
+                alert("正しいシフト名と時間帯を入力してください（開始は終了より早い時間）");
+                return;
+            }
+
+            const newKey = 's_' + Date.now();
+            const tasksObj = {};
+            for (let h = start; h < end; h++) {
+                tasksObj[h] = [];
+            }
+
+            shiftsData[newKey] = { name, start, end, tasks: tasksObj };
+            currentShiftKey = newKey;
+            saveShifts();
+            closeShiftModal();
+            renderBoard();
+        }
+
+        function deleteCurrentShift() {
+            const keys = Object.keys(shiftsData);
+            if (keys.length <= 1) {
+                alert("最後のシフトは削除できません。");
+                return;
+            }
+            if (confirm(`「${shiftsData[currentShiftKey].name}」を削除しますか？`)) {
+                delete shiftsData[currentShiftKey];
+                currentShiftKey = Object.keys(shiftsData)[0];
+                saveShifts();
+                renderBoard();
+            }
+        }
 
         renderMaster();
         renderBoard();
