@@ -19,8 +19,8 @@
             クラウドからタスクデータを読み込み中...
         </div>
 
-        <!-- メインコンテンツ（読込後に表示） -->
-        <div id="main-content" class="space-y-6 hidden">
+        <!-- メインコンテンツ（データ読込後に表示） -->
+        <div id="task-content" class="space-y-6 hidden">
             <!-- 絞り込みフィルター & 並べ替えバー -->
             <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-4">
                 <div class="flex gap-2 overflow-x-auto items-center">
@@ -53,65 +53,13 @@
         // ★ここにGASのウェブアプリURLを設定してください
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
 
-        let tasks = [];
         let currentFilter = 'すべて';
         let currentSort = 'date_desc';
+        let tasks = [];
 
-        // クラウドからタスクデータを取得
-        async function fetchTasksData() {
-            try {
-                const response = await fetch(`${GAS_API_URL}?sheet=tasks`);
-                const data = await response.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    // スプレッドシートから取得したデータはsubsが文字列化している場合があるため復元
-                    tasks = data.map(t => ({
-                        ...t,
-                        id: Number(t.id),
-                        subs: typeof t.subs === 'string' ? JSON.parse(t.subs || "[]") : (t.subs || [])
-                    }));
-                } else {
-                    tasks = [
-                        { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
-                    ];
-                    await saveTasksDataToCloud();
-                }
-            } catch (error) {
-                console.error("タスクデータ取得エラー:", error);
-                tasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
-                    { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
-                ];
-            }
-
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('main-content').classList.remove('hidden');
-            render();
-        }
-
-        // クラウドへタスクデータを保存
-        async function saveTasksDataToCloud() {
-            try {
-                // サブタスク配列をJSON文字列にして保存しやすくする
-                const payload = tasks.map(t => ({
-                    ...t,
-                    subs: JSON.stringify(t.subs)
-                }));
-
-                await fetch(GAS_API_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sheet: "tasks", action: "save", rows: payload })
-                });
-            } catch (error) {
-                console.error("タスクデータ保存エラー:", error);
-                alert("クラウドへの保存に失敗しました。");
-            }
-        }
-
-        // 各店舗のシフトからタスク割当状況を走査
+        // 全店舗のシフトデータから「どのタスクがどのシフトに割り当てられているか」を集計
         function getTaskAssignmentMap() {
-            const assignmentMap = {};
+            const assignmentMap = {}; 
             const stores = JSON.parse(localStorage.getItem('ws_stores_master')) || [];
             stores.forEach(store => {
                 const shiftData = JSON.parse(localStorage.getItem(`ws_shifts_data_${store.id}`)) || {};
@@ -139,6 +87,62 @@
             return assignmentMap;
         }
 
+        // クラウドからタスクデータを取得
+        async function fetchTasksData() {
+            try {
+                const response = await fetch(`${GAS_API_URL}?sheet=tasks`);
+                const data = await response.json();
+                
+                if (Array.isArray(data) && data.length > 0) {
+                    // スプレッドシートから取得したデータは subs が文字列化されている場合があるため配列に戻す処理
+                    tasks = data.map(t => ({
+                        id: Number(t.id) || Date.now(),
+                        name: t.name || "",
+                        tag: t.tag || "その他",
+                        subs: typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || ["実施確認", "完了確認"])
+                    }));
+                } else {
+                    // デフォルトデータ
+                    tasks = [
+                        { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
+                    ];
+                    await saveTasksDataToCloud();
+                }
+            } catch (error) {
+                console.error("タスクデータ取得エラー:", error);
+                tasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
+                    { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
+                ];
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('task-content').classList.remove('hidden');
+            render();
+        }
+
+        // クラウドへタスクデータを保存
+        async function saveTasksDataToCloud() {
+            try {
+                // スプレッドシート送信用に subs をカンマ区切り文字列などに整形
+                const uploadData = tasks.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    tag: t.tag,
+                    subs: Array.isArray(t.subs) ? t.subs.join(',') : t.subs
+                }));
+
+                await fetch(GAS_API_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sheet: "tasks", action: "save", rows: uploadData })
+                });
+            } catch (error) {
+                console.error("タスクデータ保存エラー:", error);
+                alert("クラウドへの保存に失敗しました。");
+            }
+        }
+
         function filterTasks(tag) {
             currentFilter = tag;
             render();
@@ -147,12 +151,6 @@
         function changeSort(sortVal) {
             currentSort = sortVal;
             render();
-        }
-
-        async function saveDataAndRender() {
-            render();
-            localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
-            await saveTasksDataToCloud();
         }
 
         function render() {
@@ -174,7 +172,7 @@
                     return (b.name || "").localeCompare(a.name || "", 'ja');
                 } else if (currentSort === 'date_asc') {
                     return (a.id || 0) - (b.id || 0);
-                } else {
+                } else { 
                     return (b.id || 0) - (a.id || 0);
                 }
             });
@@ -225,22 +223,54 @@
                     </div>
                 `;
             }).join('');
+            
+            // ローカルにも一時保存しつつクラウドへ同期
+            localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
             lucide.createIcons();
         }
 
-        function addTask() {
-            const newTask = { id: Date.now(), name: "新規タスク", tag: "FF", subs: ["実施確認", "完了確認"] };
+        async function addTask() {
+            const newTask = { id: Date.now(), name: "新規タスク", tag: "その他", subs: ["実施確認", "完了確認"] };
             tasks.push(newTask);
             currentSort = 'date_desc';
             document.getElementById('sort-select').value = 'date_desc';
-            saveDataAndRender();
+            
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('task-content').classList.add('hidden');
+            await saveTasksDataToCloud();
+            await fetchTasksData();
         }
 
-        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; saveDataAndRender(); }
-        function updateSub(id, sIdx, val) { tasks.find(t => t.id === id).subs[sIdx] = val; saveDataAndRender(); }
-        function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); saveDataAndRender(); }
-        function addSub(id) { tasks.find(t => t.id === id).subs.push("新規項目"); saveDataAndRender(); }
-        function deleteSub(id, sIdx) { tasks.find(t => t.id === id).subs.splice(sIdx, 1); saveDataAndRender(); }
+        async function updateTask(id, key, val) { 
+            tasks.find(t => t.id === id)[key] = val; 
+            await saveTasksDataToCloud();
+            render(); 
+        }
+
+        async function updateSub(id, sIdx, val) { 
+            tasks.find(t => t.id === id).subs[sIdx] = val; 
+            await saveTasksDataToCloud();
+        }
+
+        async function deleteTask(id) { 
+            tasks = tasks.filter(t => t.id !== id); 
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('task-content').classList.add('hidden');
+            await saveTasksDataToCloud();
+            await fetchTasksData();
+        }
+
+        async function addSub(id) { 
+            tasks.find(t => t.id === id).subs.push("新規項目"); 
+            await saveTasksDataToCloud();
+            render(); 
+        }
+
+        async function deleteSub(id, sIdx) { 
+            tasks.find(t => t.id === id).subs.splice(sIdx, 1); 
+            await saveTasksDataToCloud();
+            render(); 
+        }
 
         // 初期化実行
         fetchTasksData();
