@@ -55,6 +55,9 @@
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('store-name-display').innerText = currentStore.name;
 
+        // スタッフリストの読み込み（担当者選択用）
+        const staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
+
         // タスクマスター（サブタスク情報を引くため）
         const rawMasterTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const taskMasterMap = {};
@@ -87,7 +90,15 @@
         let currentShiftKey = Object.keys(SHIFT_DATA)[0];
         let currentShift = SHIFT_DATA[currentShiftKey];
 
-        let state = { r1: [], r2: [], currentHour: currentShift.start, activeTask: null, activeReg: null }; 
+        // 状態管理（担当者情報も保持）
+        let state = { 
+            r1: [], r2: [], 
+            r1Staff: staffList.length > 0 ? staffList[0].name : "未選択",
+            r2Staff: staffList.length > 1 ? staffList[1].name : "未選択",
+            currentHour: currentShift.start, 
+            activeTask: null, 
+            activeReg: null 
+        }; 
         let phaseStartTime = Date.now();
 
         setInterval(() => {
@@ -98,22 +109,34 @@
         function resetShift() {
             currentShiftKey = document.getElementById('shift-select').value;
             currentShift = SHIFT_DATA[currentShiftKey];
-            state = { r1: [], r2: [], currentHour: currentShift.start, activeTask: null, activeReg: null };
+            state.currentHour = currentShift.start;
+            state.r1 = [];
+            state.r2 = [];
             phaseStartTime = Date.now();
             renderApp();
         }
 
-        function renderApp() {
-            renderSection('r1', '1レジ担当者');
-            renderSection('r2', '2レジ担当者');
+        function updateStaff(regKey, staffName) {
+            if (regKey === 'r1') state.r1Staff = staffName;
+            if (regKey === 'r2') state.r2Staff = staffName;
         }
 
-        function renderSection(regKey, title) {
+        function renderApp() {
+            renderSection('r1', '1レジ担当者', state.r1Staff);
+            renderSection('r2', '2レジ担当者', state.r2Staff);
+        }
+
+        function renderSection(regKey, title, currentStaff) {
             const container = document.getElementById(`${regKey}-area`);
             const regTasksByHour = currentShift.tasks[regKey] || {};
             
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
             const currentTasks = regTasksByHour[state.currentHour] || [];
+
+            // スタッフのドロップダウン用HTML生成
+            const staffOptions = staffList.map(s => `
+                <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} (${s.note || 'スタッフ'})</option>
+            `).join('');
 
             container.innerHTML = `
                 <div class="flex flex-col gap-2 shrink-0 w-28">
@@ -126,7 +149,14 @@
                 </div>
                 
                 <div class="flex-1 space-y-4">
-                    <h3 class="font-bold text-slate-700 text-xl">${title}</h3>
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700 text-xl">${title}</h3>
+                        <select onchange="updateStaff('${regKey}', this.value)" class="text-xs p-2 border rounded-lg font-bold bg-white text-slate-700 shadow-sm">
+                            <option value="未選択">担当者を選択</option>
+                            ${staffOptions}
+                        </select>
+                    </div>
+
                     <div class="p-4 bg-slate-900 rounded-xl text-white">
                         <p class="text-xs text-slate-400">現在のフェーズ</p>
                         <p class="text-2xl font-bold font-mono">${state.currentHour}:00〜</p>
@@ -150,13 +180,13 @@
             lucide.createIcons();
         }
 
-        // タスククリック時の振り分け（サブタスク有無を正確に判定）
+        // タスククリック時の振り分け（サブタスク判定を確実に実行）
         function handleTaskClick(regKey, taskName) {
             const trimmedName = taskName.trim();
-            const subs = taskMasterMap[trimmedName] || [];
+            // マスターに登録されていて、かつサブタスクが配列として存在し1つ以上ある場合のみモーダルを表示
+            const subs = taskMasterMap[trimmedName];
             
-            if (subs.length > 0) {
-                // サブタスクが存在する場合はモーダルを表示
+            if (subs && Array.isArray(subs) && subs.length > 0) {
                 openModal(regKey, taskName, subs);
             } else {
                 // サブタスクがない場合は即座に完了状態にする
