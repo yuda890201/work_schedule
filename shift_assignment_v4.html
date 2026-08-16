@@ -10,7 +10,7 @@
 
     <div class="max-w-7xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
-            <h2 class="text-2xl font-bold text-slate-800">シフト割当管理</h2>
+            <h2 class="text-2xl font-bold text-slate-800">シフト割当管理（1レジ・2レジ別）</h2>
             <div class="flex items-center gap-4">
                 <span id="current-store-display" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-sm"></span>
                 <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
@@ -44,7 +44,7 @@
                 <div id="master-tasks" class="space-y-2 overflow-y-auto flex-1"></div>
             </div>
 
-            <!-- 右側：時間割配置 -->
+            <!-- 右側：時間割配置（1レジ・2レジ分割） -->
             <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border h-[calc(100vh-230px)] flex flex-col">
                 <div id="assignment-board" class="space-y-4 overflow-y-auto flex-1 pr-2"></div>
             </div>
@@ -58,7 +58,7 @@
             <div class="space-y-3">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">シフト名</label>
-                    <input type="text" id="new-shift-name" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 早朝シフト">
+                    <input type="text" id="new-shift-name" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 朝シフト">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
@@ -81,13 +81,13 @@
     <script>
         lucide.createIcons();
 
-        // 1. 店舗連動設定
+        // 店舗連動設定
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('current-store-display').innerText = currentStore.name;
 
-        // 2. タスクマスターの読み込み
+        // タスクマスターの読み込み
         let rawTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const TASKS_MASTER = {};
         rawTasks.forEach(t => {
@@ -99,21 +99,19 @@
         const categories = Object.keys(TASKS_MASTER);
         let activeCat = categories.length > 0 ? categories[0] : "その他";
 
-        // 3. 店舗別シフトデータの初期化（PDFのスケジュールを反映）
+        // 店舗別シフトデータの初期化（1レジ r1, 2レジ r2 に分割対応）
         const storageKey = `ws_shifts_data_${currentStoreId}`;
         let shiftsData = JSON.parse(localStorage.getItem(storageKey));
         
-        if (!shiftsData || Object.keys(shiftsData).length === 0) {
+        if (!shiftsData || Object.keys(shiftsData).length === 0 || !shiftsData[Object.keys(shiftsData)[0]].tasks.r1) {
             shiftsData = {
                 "s_morning": {
                     name: "朝・午前シフト (8:00〜12:00)",
                     start: 8,
                     end: 12,
                     tasks: {
-                        8: ["ポットのお湯確認補充", "温度チェック★", "FF袋補充"],
-                        9: ["値引きシール貼り( )14", "山崎パン2便", "売場写真"],
-                        10: ["チルド飲料品出し", "ホッターズ調理", "ホット飲料品出し"],
-                        11: ["たばこ納品検品", "たばこ補充", "トイレ清掃"]
+                        r1: { 8: ["ポットのお湯確認補充", "温度チェック★"], 9: ["値引きシール貼り( )14", "山崎パン2便"], 10: ["チルド飲料品出し", "ホッターズ調理"], 11: ["たばこ納品検品", "トイレ清掃"] },
+                        r2: { 8: ["FF袋補充", "調味料補充"], 9: ["売場写真", "用度品発注カードつける"], 10: ["ホット飲料品出し", "常温惣菜調理"], 11: ["たばこ補充", "清掃チェック(トイレ)"] }
                     }
                 },
                 "s_afternoon": {
@@ -121,23 +119,8 @@
                     start: 13,
                     end: 17,
                     tasks: {
-                        13: ["コーヒーマシン清掃", "温度チェック★", "コーヒー用度品補充"],
-                        14: ["FF袋補充", "水補充", "廃棄チェック( )14"],
-                        15: ["FF廃棄チェック", "ホッターズ調理", "トイレ清掃"],
-                        16: ["センター3便(パン) 売場写真", "POP整理", "宅急便集荷"]
-                    }
-                },
-                "s_night": {
-                    name: "夜間・深夜シフト (17:00〜23:00)",
-                    start: 17,
-                    end: 23,
-                    tasks: {
-                        17: ["コーヒーマシン清掃", "温度チェック★", "未登録商品撤去"],
-                        18: ["FF廃棄チェック", "ホッターズ調理", "廃棄チェック( )18"],
-                        19: ["FF袋補充", "調味料補充", "ホット飲料品出し"],
-                        20: ["トイレ清掃", "納品用台車準備", "お菓子開封作業(カウンター内)"],
-                        21: ["レシート・帳票整理", "廃棄チェック( )21", "クーポン整理"],
-                        22: ["雑誌返品", "温度チェック★", "ホット飲料品出し"]
+                        r1: { 13: ["コーヒーマシン清掃", "温度チェック★"], 14: ["FF袋補充", "水補充"], 15: ["FF廃棄チェック", "ホッターズ調理"], 16: ["センター3便(パン) 売場写真", "POP整理"] },
+                        r2: { 13: ["コーヒー用度品補充", "チルド飲料品出し"], 14: ["廃棄チェック( )14", "たばこ補充"], 15: ["トイレ清掃", "常温惣菜調理"], 16: ["宅急便集荷", "レジ点検"] }
                     }
                 }
             };
@@ -199,21 +182,40 @@
             const currentShift = shiftsData[currentShiftKey];
             
             if (!currentShift) return;
+            if (!currentShift.tasks.r1) currentShift.tasks.r1 = {};
+            if (!currentShift.tasks.r2) currentShift.tasks.r2 = {};
 
             let hoursHtml = '';
             for (let h = currentShift.start; h < currentShift.end; h++) {
-                if (!currentShift.tasks[h]) currentShift.tasks[h] = [];
+                if (!currentShift.tasks.r1[h]) currentShift.tasks.r1[h] = [];
+                if (!currentShift.tasks.r2[h]) currentShift.tasks.r2[h] = [];
+
                 hoursHtml += `
-                    <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 min-h-[80px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h})">
-                        <div class="flex justify-between items-center mb-2">
-                            <h4 class="text-xs font-bold text-slate-400">${h}:00〜</h4>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            ${currentShift.tasks[h].map(t => `
-                                <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                                    ${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-600" onclick="removeTask(${h}, '${t}')"></i>
-                                </span>
-                            `).join('')}
+                    <div class="border rounded-xl p-4 bg-slate-50 space-y-3">
+                        <div class="font-bold text-slate-600 text-sm border-b pb-1">${h}:00〜</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- 1レジレーン -->
+                            <div class="border-2 border-dashed border-blue-200 bg-white rounded-lg p-3 min-h-[70px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h}, 'r1')">
+                                <div class="text-[10px] font-bold text-blue-600 mb-1">1レジ担当者</div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    ${currentShift.tasks.r1[h].map(t => `
+                                        <span class="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md text-xs font-bold flex items-center gap-1">
+                                            ${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-600" onclick="removeTask(${h}, 'r1', '${t}')"></i>
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <!-- 2レジレーン -->
+                            <div class="border-2 border-dashed border-emerald-200 bg-white rounded-lg p-3 min-h-[70px]" ondragover="event.preventDefault()" ondrop="handleDrop(event, ${h}, 'r2')">
+                                <div class="text-[10px] font-bold text-emerald-600 mb-1">2レジ担当者</div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    ${currentShift.tasks.r2[h].map(t => `
+                                        <span class="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md text-xs font-bold flex items-center gap-1">
+                                            ${t} <i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-600" onclick="removeTask(${h}, 'r2', '${t}')"></i>
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -223,29 +225,28 @@
         }
 
         function handleDragStart(e, task) { e.dataTransfer.setData('text/plain', task); }
-        function handleDrop(e, hour) { 
+        function handleDrop(e, hour, regKey) { 
             const task = e.dataTransfer.getData('text/plain');
-            const tasksAtHour = shiftsData[currentShiftKey].tasks[hour];
+            const tasksAtHour = shiftsData[currentShiftKey].tasks[regKey][hour];
             if (!tasksAtHour.includes(task)) {
                 tasksAtHour.push(task);
                 saveShifts();
                 renderBoard();
             }
         }
-        function removeTask(hour, task) {
-            const tasksAtHour = shiftsData[currentShiftKey].tasks[hour];
-            shiftsData[currentShiftKey].tasks[hour] = tasksAtHour.filter(t => t !== task);
+        function removeTask(hour, regKey, task) {
+            const tasksAtHour = shiftsData[currentShiftKey].tasks[regKey][hour];
+            shiftsData[currentShiftKey].tasks[regKey][hour] = tasksAtHour.filter(t => t !== task);
             saveShifts();
             renderBoard();
         }
 
-        // モーダル制御（ボタン不具合修正版）
         function openShiftModal() {
             isEditing = false;
             document.getElementById('modal-title').innerText = "新規シフト枠の追加";
             document.getElementById('new-shift-name').value = "";
             document.getElementById('new-shift-start').value = "8";
-            document.getElementById('new-shift-end').value = "17";
+            document.getElementById('new-shift-end').value = "12";
             document.getElementById('shift-modal').classList.remove('hidden');
         }
 
@@ -277,20 +278,22 @@
             if (isEditing) {
                 const current = shiftsData[currentShiftKey];
                 current.name = name;
-                const newTasksObj = {};
+                const newR1 = {}, newR2 = {};
                 for (let h = start; h < end; h++) {
-                    newTasksObj[h] = current.tasks[h] || [];
+                    newR1[h] = (current.tasks.r1 && current.tasks.r1[h]) ? current.tasks.r1[h] : [];
+                    newR2[h] = (current.tasks.r2 && current.tasks.r2[h]) ? current.tasks.r2[h] : [];
                 }
                 current.start = start;
                 current.end = end;
-                current.tasks = newTasksObj;
+                current.tasks = { r1: newR1, r2: newR2 };
             } else {
                 const newKey = 's_' + Date.now();
-                const tasksObj = {};
+                const r1 = {}, r2 = {};
                 for (let h = start; h < end; h++) {
-                    tasksObj[h] = [];
+                    r1[h] = [];
+                    r2[h] = [];
                 }
-                shiftsData[newKey] = { name, start, end, tasks: tasksObj };
+                shiftsData[newKey] = { name, start, end, tasks: { r1, r2 } };
                 currentShiftKey = newKey;
             }
 
