@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - クラウド同期版</title>
+    <title>WS作業入力ポータル - ログ蓄積版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>body { font-family: 'Inter', sans-serif; }</style>
@@ -83,12 +83,10 @@
         // クラウドから全データを一括非同期取得
         async function initPortal() {
             try {
-                // 1. スタッフデータの取得
                 const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
                 const staffData = await staffRes.json();
                 staffList = Array.isArray(staffData) ? staffData : [];
 
-                // 2. タスクマスターの取得
                 const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
                 const taskData = await taskRes.json();
                 if (Array.isArray(taskData)) {
@@ -99,7 +97,6 @@
                     });
                 }
 
-                // 3. シフトデータの取得
                 const sheetName = `shifts_${currentStoreId}`;
                 const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
                 const shiftDataJson = await shiftRes.json();
@@ -140,7 +137,6 @@
                 currentShift = SHIFT_DATA[currentShiftKey];
             }
 
-            // セレクトボックス構築
             const shiftSelect = document.getElementById('shift-select');
             shiftSelect.innerHTML = Object.keys(SHIFT_DATA).map(k => `
                 <option value="${k}">${SHIFT_DATA[k].name}</option>
@@ -269,6 +265,8 @@
             lucide.createIcons();
         }
 
+        let tempTaskClickInfo = null;
+
         function handleTaskClick(regKey, taskName) {
             if (state[regKey].includes(taskName)) return;
 
@@ -279,6 +277,7 @@
                 subs = ["実施確認", "完了確認"];
             }
             
+            tempTaskClickInfo = { regKey, taskName, clickTime: Date.now() };
             openModal(regKey, taskName, subs);
         }
 
@@ -315,17 +314,18 @@
             }
         }
 
-        function confirmTask() {
+        // タスク完了時にスプレッドシートの logs シートへ自動記録
+        async function confirmTask() {
             const regKey = state.activeReg;
             const taskName = state.activeTask;
 
             if (!state[regKey].includes(taskName)) {
                 const nowTime = Date.now();
                 const lastTime = regKey === 'r1' ? state.r1LastCompleteTime : state.r2LastCompleteTime;
-                const duration = Math.floor((nowTime - lastTime) / 1000);
+                const durationSec = Math.floor((nowTime - lastTime) / 1000);
 
                 if (regKey === 'r1') {
-                    state.r1Times[taskName] = duration;
+                    state.r1Times[taskName] = durationSec;
                     state.r1LastCompleteTime = nowTime;
                 } else {
                     state.r2Times[taskName] = duration;
@@ -333,6 +333,34 @@
                 }
 
                 state[regKey].push(taskName);
+
+                // サーバー（スプレッドシートの logs シート）へ完了ログを送信
+                const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
+                const logData = {
+                    sheet: "logs",
+                    action: "append",
+                    row: {
+                        timestamp: new Date().toLocaleString(),
+                        store: currentStore.name,
+                        shift: currentShift.name,
+                        reg: regKey === 'r1' ? '1レジ' : '2レジ',
+                        staff: staffName,
+                        task: taskName,
+                        hour: state.currentHour + "時台",
+                        duration_sec: durationSec
+                    }
+                };
+
+                try {
+                    fetch(GAS_API_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(logData)
+                    });
+                } catch (err) {
+                    console.error("ログ送信エラー:", err);
+                }
             }
 
             document.getElementById('task-modal').classList.add('hidden');
