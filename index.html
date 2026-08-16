@@ -55,7 +55,7 @@
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('store-name-display').innerText = currentStore.name;
 
-        // スタッフリストの読み込み（担当者選択用）
+        // スタッフリストの読み込み
         const staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
 
         // タスクマスター（サブタスク情報を引くため）
@@ -81,7 +81,6 @@
             }
         };
 
-        // セレクトボックスの構築
         const shiftSelect = document.getElementById('shift-select');
         shiftSelect.innerHTML = Object.keys(SHIFT_DATA).map(k => `
             <option value="${k}">${SHIFT_DATA[k].name}</option>
@@ -90,7 +89,6 @@
         let currentShiftKey = Object.keys(SHIFT_DATA)[0];
         let currentShift = SHIFT_DATA[currentShiftKey];
 
-        // 状態管理（担当者情報も保持）
         let state = { 
             r1: [], r2: [], 
             r1Staff: staffList.length > 0 ? staffList[0].name : "未選択",
@@ -133,9 +131,9 @@
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
             const currentTasks = regTasksByHour[state.currentHour] || [];
 
-            // スタッフのドロップダウン用HTML生成
+            // 担当者選択の表示を「名前 / 所属店舗名」に変更
             const staffOptions = staffList.map(s => `
-                <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} (${s.note || 'スタッフ'})</option>
+                <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} / ${s.store || '店舗未設定'}</option>
             `).join('');
 
             container.innerHTML = `
@@ -180,21 +178,16 @@
             lucide.createIcons();
         }
 
-        // タスククリック時の振り分け（サブタスク判定を確実に実行）
+        // すべてのタスククリックで必ずモーダルを表示（サブタスク未設定ならデフォルト項目を表示）
         function handleTaskClick(regKey, taskName) {
             const trimmedName = taskName.trim();
-            // マスターに登録されていて、かつサブタスクが配列として存在し1つ以上ある場合のみモーダルを表示
-            const subs = taskMasterMap[trimmedName];
+            let subs = taskMasterMap[trimmedName];
             
-            if (subs && Array.isArray(subs) && subs.length > 0) {
-                openModal(regKey, taskName, subs);
-            } else {
-                // サブタスクがない場合は即座に完了状態にする
-                if (!state[regKey].includes(taskName)) {
-                    state[regKey].push(taskName);
-                }
-                renderApp();
+            if (!subs || !Array.isArray(subs) || subs.length === 0) {
+                subs = ["実施確認", "完了確認"]; // 未設定時のデフォルトサブタスク
             }
+            
+            openModal(regKey, taskName, subs);
         }
 
         function openModal(regKey, taskName, subs) {
