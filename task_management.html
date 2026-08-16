@@ -11,7 +11,6 @@
     <div class="max-w-3xl mx-auto space-y-6">
         <div class="flex justify-between items-center">
             <h2 class="text-2xl font-bold text-slate-800">タスク管理マスター</h2>
-            <!-- ダッシュボードへ戻るように変更 -->
             <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
         </div>
 
@@ -40,21 +39,53 @@
         </div>
     </div>
 
-    <!-- 共有タグサジェスト用のdatalist -->
-    <datalist id="tag-suggestions"></datalist>
-
     <script>
         lucide.createIcons();
         let currentFilter = 'すべて';
         let currentSort = 'date_desc';
 
-        // タスクデータの読み込み
+        // 1. タスクデータの読み込み
         let tasks = JSON.parse(localStorage.getItem('ws_tasks_master'));
         if (!tasks || tasks.length === 0) {
             tasks = [
                 { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
             ];
             localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
+        }
+
+        // 2. 全店舗のシフトデータから「どのタスクがどのシフトに割り当てられているか」を走査・集計
+        function getTaskAssignmentMap() {
+            const assignmentMap = {}; // { "タスク名": ["1号店: 朝シフト", "2号店: 昼シフト"] }
+            
+            // ローカルストレージから全店舗データを取得
+            const stores = JSON.parse(localStorage.getItem('ws_stores_master')) || [];
+            stores.forEach(store => {
+                const shiftData = JSON.parse(localStorage.getItem(`ws_shifts_data_${store.id}`)) || {};
+                Object.values(shiftData).forEach(shift => {
+                    if (shift && shift.tasks) {
+                        // r1, r2 または 旧構造のタスクをチェック
+                        const checkAndAdd = (taskList) => {
+                            if (Array.isArray(taskList)) {
+                                taskList.forEach(tName => {
+                                    if (!assignmentMap[tName]) assignmentMap[tName] = [];
+                                    const label = `${store.name}: ${shift.name.split(' ')[0]}`;
+                                    if (!assignmentMap[tName].includes(label)) {
+                                        assignmentMap[tName].push(label);
+                                    }
+                                });
+                            }
+                        };
+
+                        if (shift.tasks.r1) Object.values(shift.tasks.r1).forEach(checkAndAdd);
+                        if (shift.tasks.r2) Object.values(shift.tasks.r2).forEach(checkAndAdd);
+                        // 旧構造対応
+                        Object.values(shift.tasks).forEach(val => {
+                            if (Array.isArray(val)) checkAndAdd(val);
+                        });
+                    }
+                });
+            });
+            return assignmentMap;
         }
 
         function filterTasks(tag) {
@@ -77,9 +108,8 @@
                 <button onclick="filterTasks('${t}')" class="px-3 py-1 ${currentFilter === t ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'} rounded-full text-sm font-bold whitespace-nowrap">${t}</button>
             `).join('');
 
-            // datalist（タグ選択用候補）の更新
-            const datalist = document.getElementById('tag-suggestions');
-            datalist.innerHTML = allTags.map(t => `<option value="${t}">`).join('');
+            // シフト割当マップの取得
+            const assignmentMap = getTaskAssignmentMap();
 
             // 絞り込み
             let filteredTasks = currentFilter === 'すべて' ? [...tasks] : tasks.filter(t => (t.tag || 'その他') === currentFilter);
@@ -99,42 +129,68 @@
 
             const list = document.getElementById('task-list');
             
-            list.innerHTML = filteredTasks.map(t => `
-                <div class="border rounded-lg p-4 space-y-3 bg-slate-50">
-                    <div class="flex gap-2 items-center">
-                        <input value="${t.name}" onchange="updateTask(${t.id}, 'name', this.value)" class="font-bold text-lg flex-1 bg-transparent border-b border-transparent focus:border-blue-500 outline-none">
-                        
-                        <!-- 既存のタグを選択可能にするため datalist を紐付け -->
-                        <input list="tag-suggestions" value="${t.tag || ''}" onchange="updateTask(${t.id}, 'tag', this.value)" placeholder="タグを選択・入力" class="w-32 text-xs font-bold text-blue-600 bg-white border px-2 py-1 rounded border-blue-200 outline-none">
-                        
-                        <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-red-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            list.innerHTML = filteredTasks.map(t => {
+                // 未編集（新規作成のまま）のタスクは赤色ハイライト
+                const isUnedited = t.name === "新規タスク";
+                const cardBg = isUnedited ? "bg-red-50 border-red-300" : "bg-slate-50 border-slate-200";
+
+                // 割当状況のバッジ生成
+                const assignedShifts = assignmentMap[t.name] || [];
+                const assignedHtml = assignedShifts.length > 0 
+                    ? assignedShifts.map(s => `<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">${s}</span>`).join(' ')
+                    : `<span class="text-slate-400 text-[10px]">どのシフトにも割り当てられていません</span>`;
+
+                // タグ選択用のセレクトボックスの選択肢HTML
+                const tagOptions = allTags.map(tag => `<option value="${tag}" ${t.tag === tag ? 'selected' : ''}>${tag}</option>`).join('');
+
+                return `
+                    <div class="border rounded-lg p-4 space-y-3 ${cardBg} transition">
+                        <div class="flex gap-2 items-center">
+                            <input value="${t.name}" onchange="updateTask(${t.id}, 'name', this.value)" class="font-bold text-lg flex-1 bg-transparent border-b ${isUnedited ? 'border-red-400 text-red-700' : 'border-transparent'} focus:border-blue-500 outline-none" placeholder="タスク名を入力">
+                            
+                            <!-- タグ選択用セレクトボックス（既存タグから確実に選べるように変更） -->
+                            <select onchange="updateTask(${t.id}, 'tag', this.value)" class="text-xs font-bold text-blue-600 bg-white border px-2 py-1.5 rounded border-blue-200 outline-none">
+                                ${tagOptions}
+                                <option value="その他" ${!allTags.includes(t.tag) ? 'selected' : ''}>+ その他/新規</option>
+                            </select>
+                            
+                            <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-red-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+
+                        <!-- 割り当てられているシフト枠の表示 -->
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="font-bold text-slate-500">割当シフト:</span>
+                            <div class="flex flex-wrap gap-1">${assignedHtml}</div>
+                        </div>
+
+                        <div class="ml-6 space-y-2 pt-2 border-t border-slate-200/60">
+                            ${t.subs.map((s, idx) => `
+                                <div class="flex gap-2 text-sm items-center">
+                                    <span class="text-slate-400">•</span>
+                                    <input value="${s}" onchange="updateSub(${t.id}, ${idx}, this.value)" class="flex-1 bg-transparent border-b border-transparent focus:border-blue-500 outline-none">
+                                    <button onclick="deleteSub(${t.id}, ${idx})" class="text-slate-300 hover:text-red-500 p-1"><i data-lucide="x" class="w-3 h-3"></i></button>
+                                </div>
+                            `).join('')}
+                            <button onclick="addSub(${t.id})" class="text-xs text-blue-600 font-bold flex items-center gap-1 mt-2">
+                                <i data-lucide="plus" class="w-3 h-3"></i> サブタスク追加
+                            </button>
+                        </div>
                     </div>
-                    <div class="ml-6 space-y-2">
-                        ${t.subs.map((s, idx) => `
-                            <div class="flex gap-2 text-sm items-center">
-                                <span class="text-slate-400">•</span>
-                                <input value="${s}" onchange="updateSub(${t.id}, ${idx}, this.value)" class="flex-1 bg-transparent border-b border-transparent focus:border-blue-500 outline-none">
-                                <button onclick="deleteSub(${t.id}, ${idx})" class="text-slate-300 hover:text-red-500 p-1"><i data-lucide="x" class="w-3 h-3"></i></button>
-                            </div>
-                        `).join('')}
-                        <button onclick="addSub(${t.id})" class="text-xs text-blue-600 font-bold flex items-center gap-1 mt-2">
-                            <i data-lucide="plus" class="w-3 h-3"></i> サブタスク追加
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
             save();
             lucide.createIcons();
         }
 
         function addTask() {
-            // 新規作成したタスクを配列の「先頭（一番上）」に追加
-            const newTask = { id: Date.now(), name: "新規タスク", tag: "その他", subs: ["実施確認", "完了確認"] };
-            tasks.unshift(newTask);
+            const newTask = { id: Date.now(), name: "新規タスク", tag: "FF", subs: ["実施確認", "完了確認"] };
+            tasks.push(newTask); // 配列の末尾に追加（並び替え機能で新しい順にすれば一番上に表示されます）
+            currentSort = 'date_desc'; // 新規追加したら新しい順表示に切り替え
+            document.getElementById('sort-select').value = 'date_desc';
             render();
         }
 
-        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; save(); }
+        function updateTask(id, key, val) { tasks.find(t => t.id === id)[key] = val; save(); render(); }
         function updateSub(id, sIdx, val) { tasks.find(t => t.id === id).subs[sIdx] = val; save(); }
         function deleteTask(id) { tasks = tasks.filter(t => t.id !== id); render(); }
         function addSub(id) { tasks.find(t => t.id === id).subs.push("新規項目"); render(); }
