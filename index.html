@@ -108,9 +108,7 @@
             const container = document.getElementById(`${regKey}-area`);
             const regTasksByHour = currentShift.tasks[regKey] || {};
             
-            // このシフトのこのレジにある全タスクのリスト（重複排除）
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
-            // 現在の時間のタスクリスト
             const currentTasks = regTasksByHour[state.currentHour] || [];
 
             container.innerHTML = `
@@ -133,7 +131,7 @@
                     ${currentTasks.length === 0 ? '<p class="text-xs text-slate-400 py-4">この時間の割当タスクはありません</p>' : ''}
 
                     ${currentTasks.map(name => `
-                        <button onclick="openModal('${regKey}', '${name}')" 
+                        <button onclick="handleTaskClick('${regKey}', '${name}')" 
                             class="w-full p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${state[regKey].includes(name) ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-800 hover:border-blue-400'}">
                             ${name}
                             ${state[regKey].includes(name) ? '<i data-lucide="check-circle" class="text-emerald-600"></i>' : ''}
@@ -148,12 +146,26 @@
             lucide.createIcons();
         }
 
-        function openModal(regKey, taskName) {
+        // タスククリック時の振り分け（サブタスク有無を判定）
+        function handleTaskClick(regKey, taskName) {
+            const subs = taskMasterMap[taskName] || [];
+            
+            if (subs.length > 0) {
+                // サブタスクが存在する場合はモーダルを表示
+                openModal(regKey, taskName, subs);
+            } else {
+                // サブタスクがない場合は即座に完了状態にする
+                if (!state[regKey].includes(taskName)) {
+                    state[regKey].push(taskName);
+                }
+                renderApp();
+            }
+        }
+
+        function openModal(regKey, taskName, subs) {
             state.activeTask = taskName;
             state.activeReg = regKey;
             
-            // タスクマスターからサブタスクを取得（なければ汎用項目を作成）
-            const subs = taskMasterMap[taskName] || ["実施確認", "完了確認"];
             const list = document.getElementById('subtask-list');
             const btn = document.getElementById('complete-btn');
             
