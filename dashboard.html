@@ -9,6 +9,7 @@
 <body class="bg-slate-100 min-h-screen p-4 md:p-8">
 
     <div class="max-w-5xl mx-auto space-y-6">
+        <!-- 店舗切替・編集バー -->
         <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
                 <span class="font-bold text-slate-700 text-sm">対象店舗:</span>
@@ -25,32 +26,69 @@
             </div>
         </div>
 
+        <!-- 各画面へのリンクカード -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- カード類は省略（前回と同じです） -->
-            <div onclick="window.location.href='index.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 cursor-pointer flex items-center gap-4">
-                <div class="p-4 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="pen-tool"></i></div>
-                <div><h3 class="font-bold text-slate-800">作業入力ポータル</h3></div>
+            <div onclick="window.location.href='index.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-blue-50 text-blue-600 rounded-xl">
+                    <i data-lucide="pen-tool" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">WS作業入力ポータル</h3>
+                    <p class="text-xs text-slate-500">現在の店舗のシフト作業・進捗を入力します</p>
+                </div>
             </div>
-            <div onclick="window.location.href='shift_assignment_v4.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 cursor-pointer flex items-center gap-4">
-                <div class="p-4 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="calendar"></i></div>
-                <div><h3 class="font-bold text-slate-800">シフト割当管理</h3></div>
+
+            <div onclick="window.location.href='shift_assignment_v4.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <i data-lucide="calendar" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">シフト割当管理</h3>
+                    <p class="text-xs text-slate-500">店舗ごとの時間帯別タスク配置を作成します</p>
+                </div>
             </div>
-            <div onclick="window.location.href='task_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 cursor-pointer flex items-center gap-4">
-                <div class="p-4 bg-amber-50 text-amber-600 rounded-xl"><i data-lucide="check-square"></i></div>
-                <div><h3 class="font-bold text-slate-800">タスク管理マスター</h3></div>
+
+            <div onclick="window.location.href='task_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-amber-50 text-amber-600 rounded-xl">
+                    <i data-lucide="check-square" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">タスク管理マスター</h3>
+                    <p class="text-xs text-slate-500">店舗共通の作業マスターやサブタスクを編集します</p>
+                </div>
             </div>
-            <div onclick="window.location.href='staff_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 cursor-pointer flex items-center gap-4">
-                <div class="p-4 bg-purple-50 text-purple-600 rounded-xl"><i data-lucide="users"></i></div>
-                <div><h3 class="font-bold text-slate-800">スタッフ管理</h3></div>
+
+            <div onclick="window.location.href='staff_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-purple-50 text-purple-600 rounded-xl">
+                    <i data-lucide="users" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">スタッフ管理</h3>
+                    <p class="text-xs text-slate-500">スタッフ名簿や権限を管理します</p>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- モーダル（省略：前回と同じです） -->
+    <!-- 店舗追加・編集モーダル -->
+    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
+            <h3 id="store-modal-title" class="font-bold text-lg text-slate-800">新規店舗の追加</h3>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">店舗名（例: 3号店）</label>
+                <input type="text" id="store-name-input" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 3号店">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeStoreModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
+                <button onclick="saveStore()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">保存する</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         lucide.createIcons();
 
-        // 店舗マスターの初期化（1号店・2号店をデフォルトに）
+        // 店舗マスターの初期化（1号店・2号店）
         let storesMaster = JSON.parse(localStorage.getItem('ws_stores_master'));
         if (!storesMaster || storesMaster.length === 0) {
             storesMaster = [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
@@ -63,14 +101,64 @@
             localStorage.setItem('ws_current_store_id', currentStoreId);
         }
 
-        // --- 以下ロジック（saveStoreなどの関数は前回と同じです） ---
+        let isStoreEditing = false;
+
         function renderStoreSelect() {
             const select = document.getElementById('store-select');
             select.innerHTML = storesMaster.map(s => `
                 <option value="${s.id}" ${s.id === currentStoreId ? 'selected' : ''}>${s.name}</option>
             `).join('');
         }
-        // ... (renderStoreSelect / saveStore 等の関数)
+
+        function changeStore(storeId) {
+            currentStoreId = storeId;
+            localStorage.setItem('ws_current_store_id', storeId);
+        }
+
+        function openStoreModal() {
+            isStoreEditing = false;
+            document.getElementById('store-modal-title').innerText = "新規店舗の追加";
+            document.getElementById('store-name-input').value = "";
+            document.getElementById('store-modal').classList.remove('hidden');
+        }
+
+        function openEditStoreModal() {
+            const currentStore = storesMaster.find(s => s.id === currentStoreId);
+            if (!currentStore) return;
+            isStoreEditing = true;
+            document.getElementById('store-modal-title').innerText = "店舗名の編集";
+            document.getElementById('store-name-input').value = currentStore.name;
+            document.getElementById('store-modal').classList.remove('hidden');
+        }
+
+        function closeStoreModal() {
+            document.getElementById('store-modal').classList.add('hidden');
+        }
+
+        function saveStore() {
+            const name = document.getElementById('store-name-input').value.trim();
+            if (!name) {
+                alert("店舗名を入力してください");
+                return;
+            }
+
+            if (isStoreEditing) {
+                const currentStore = storesMaster.find(s => s.id === currentStoreId);
+                if (currentStore) {
+                    currentStore.name = name;
+                }
+            } else {
+                const newId = 'store_' + Date.now();
+                storesMaster.push({ id: newId, name: name });
+                currentStoreId = newId;
+                localStorage.setItem('ws_current_store_id', newId);
+            }
+
+            localStorage.setItem('ws_stores_master', JSON.stringify(storesMaster));
+            closeStoreModal();
+            renderStoreSelect();
+        }
+
         renderStoreSelect();
     </script>
 </body>
