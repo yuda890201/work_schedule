@@ -60,24 +60,32 @@
     <script>
         lucide.createIcons();
 
-        // 共通データの読み込み
-        const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
+        // 1. 店舗マスターの初期設定（1号店・2号店）
+        let storesMaster = JSON.parse(localStorage.getItem('ws_stores_master'));
+        if (!storesMaster || storesMaster.length === 0) {
+            storesMaster = [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
+            localStorage.setItem('ws_stores_master', JSON.stringify(storesMaster));
+        }
+
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('current-store-display').innerText = currentStore.name;
 
-        // スタッフデータの初期化（全店で共有）
+        // 2. スタッフデータの初期化（スタッフ1〜10 + 管理職）
         let staffList = JSON.parse(localStorage.getItem('ws_staff_list'));
         if (!staffList || staffList.length === 0) {
             staffList = [
-                { uniqueId: 1, empId: "EMP001", name: "オーナー", store: storesMaster[0].name, note: "オーナー" },
-                { uniqueId: 2, empId: "EMP002", name: "マネージャー", store: storesMaster[0].name, note: "マネージャー" },
-                { uniqueId: 3, empId: "EMP003", name: "店長", store: storesMaster[0].name, note: "店長" },
-                ...[1,2,3,4,5].map(i => ({ uniqueId: 10+i, empId: "STF00"+i, name: "スタッフ"+i, store: storesMaster[0].name, note: "スタッフ" }))
+                { uniqueId: 1, empId: "MGR001", name: "オーナー", store: "1号店", note: "オーナー" },
+                { uniqueId: 2, empId: "MGR002", name: "マネージャー", store: "1号店", note: "マネージャー" },
+                { uniqueId: 3, empId: "MGR003", name: "店長", store: "1号店", note: "店長" },
+                ...[...Array(10)].map((_, i) => ({ 
+                    uniqueId: 10 + i, empId: `STF00${i+1}`, name: `スタッフ${i+1}`, store: "1号店", note: "スタッフ" 
+                }))
             ];
             localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
         }
 
+        // --- 以下ロジック（前回の実装を維持） ---
         let editingUniqueId = null;
 
         function renderStoreOptions() {
@@ -124,6 +132,8 @@
             document.getElementById('staff-modal').classList.remove('hidden');
         }
 
+        function closeModal() { document.getElementById('staff-modal').classList.add('hidden'); }
+
         function saveStaff() {
             const data = {
                 empId: document.getElementById('staff-id-input').value,
@@ -141,8 +151,6 @@
             closeModal();
             renderTable();
         }
-
-        function closeModal() { document.getElementById('staff-modal').classList.add('hidden'); }
 
         renderStoreOptions();
         renderTable();
