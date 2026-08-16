@@ -60,7 +60,7 @@
     <script>
         lucide.createIcons();
 
-        // 1. 店舗マスターの初期設定（1号店・2号店）
+        // 1. 店舗マスターの取得（なければ1号店・2号店を作成）
         let storesMaster = JSON.parse(localStorage.getItem('ws_stores_master'));
         if (!storesMaster || storesMaster.length === 0) {
             storesMaster = [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
@@ -71,21 +71,36 @@
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('current-store-display').innerText = currentStore.name;
 
-        // 2. スタッフデータの初期化（スタッフ1〜10 + 管理職）
+        // 2. スタッフデータの初期化（1号店・2号店にスタッフを振り分けて登録）
         let staffList = JSON.parse(localStorage.getItem('ws_staff_list'));
+        
+        // データが未登録、または旧仕様のデータ構造の可能性があるため強制リセットして2店舗分の初期データを構築
         if (!staffList || staffList.length === 0) {
+            const store1Name = storesMaster[0] ? storesMaster[0].name : "1号店";
+            const store2Name = storesMaster[1] ? storesMaster[1].name : "2号店";
+
             staffList = [
-                { uniqueId: 1, empId: "MGR001", name: "オーナー", store: "1号店", note: "オーナー" },
-                { uniqueId: 2, empId: "MGR002", name: "マネージャー", store: "1号店", note: "マネージャー" },
-                { uniqueId: 3, empId: "MGR003", name: "店長", store: "1号店", note: "店長" },
-                ...[...Array(10)].map((_, i) => ({ 
-                    uniqueId: 10 + i, empId: `STF00${i+1}`, name: `スタッフ${i+1}`, store: "1号店", note: "スタッフ" 
-                }))
+                // 1号店メンバー
+                { uniqueId: 1, empId: "MGR001", name: "オーナー", store: store1Name, note: "オーナー" },
+                { uniqueId: 2, empId: "MGR002", name: "マネージャー", store: store1Name, note: "マネージャー" },
+                { uniqueId: 3, empId: "MGR003", name: "店長(1号店)", store: store1Name, note: "店長" },
+                { uniqueId: 4, empId: "STF001", name: "スタッフ1", store: store1Name, note: "1号店スタッフ" },
+                { uniqueId: 5, empId: "STF002", name: "スタッフ2", store: store1Name, note: "1号店スタッフ" },
+                { uniqueId: 6, empId: "STF003", name: "スタッフ3", store: store1Name, note: "1号店スタッフ" },
+                { uniqueId: 7, empId: "STF004", name: "スタッフ4", store: store1Name, note: "1号店スタッフ" },
+                { uniqueId: 8, empId: "STF005", name: "スタッフ5", store: store1Name, note: "1号店スタッフ" },
+                
+                // 2号店メンバー
+                { uniqueId: 9, empId: "MGR004", name: "店長(2号店)", store: store2Name, note: "店長" },
+                { uniqueId: 10, empId: "STF006", name: "スタッフ6", store: store2Name, note: "2号店スタッフ" },
+                { uniqueId: 11, empId: "STF007", name: "スタッフ7", store: store2Name, note: "2号店スタッフ" },
+                { uniqueId: 12, empId: "STF008", name: "スタッフ8", store: store2Name, note: "2号店スタッフ" },
+                { uniqueId: 13, empId: "STF009", name: "スタッフ9", store: store2Name, note: "2号店スタッフ" },
+                { uniqueId: 14, empId: "STF010", name: "スタッフ10", store: store2Name, note: "2号店スタッフ" }
             ];
             localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
         }
 
-        // --- 以下ロジック（前回の実装を維持） ---
         let editingUniqueId = null;
 
         function renderStoreOptions() {
@@ -95,25 +110,32 @@
 
         function renderTable() {
             const tbody = document.getElementById('staff-table-body');
-            const sortedList = [...staffList].sort((a, b) => (b.store === currentStore.name) - (a.store === currentStore.name));
+            
+            // 現在選択中の店舗のスタッフを最優先にソート
+            const sortedList = [...staffList].sort((a, b) => {
+                const aMatch = (a.store === currentStore.name) ? 1 : 0;
+                const bMatch = (b.store === currentStore.name) ? 1 : 0;
+                return bMatch - aMatch;
+            });
 
             tbody.innerHTML = sortedList.map(s => `
-                <tr class="${s.store === currentStore.name ? 'bg-blue-50/30' : ''}">
+                <tr class="${s.store === currentStore.name ? 'bg-blue-50/30' : ''} hover:bg-slate-50">
                     <td class="p-4 font-mono font-bold">${s.empId}</td>
                     <td class="p-4 font-bold">${s.name}</td>
-                    <td class="p-4"><span class="px-2 py-1 text-xs font-bold ${s.store === currentStore.name ? 'bg-blue-100 text-blue-700' : 'bg-slate-100'} rounded">${s.store}</span></td>
-                    <td class="p-4">${s.note}</td>
+                    <td class="p-4"><span class="px-2 py-1 text-xs font-bold ${s.store === currentStore.name ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'} rounded">${s.store}</span></td>
+                    <td class="p-4 text-slate-500">${s.note}</td>
                     <td class="p-4 text-right">
-                        <button onclick="openEditModal(${s.uniqueId})" class="text-blue-600 font-bold text-xs">編集</button>
+                        <button onclick="openEditModal(${s.uniqueId})" class="text-blue-600 font-bold text-xs bg-blue-50 px-2.5 py-1.5 rounded hover:bg-blue-100">編集</button>
                     </td>
                 </tr>
             `).join('');
+            lucide.createIcons();
         }
 
         function openAddModal() {
             editingUniqueId = null;
             document.getElementById('modal-title').innerText = "新規スタッフ追加";
-            document.getElementById('staff-id-input').value = "";
+            document.getElementById('staff-id-input').value = "EMP" + Math.floor(Math.random() * 900 + 100);
             document.getElementById('staff-name-input').value = "";
             document.getElementById('staff-note-input').value = "";
             renderStoreOptions();
@@ -122,6 +144,7 @@
 
         function openEditModal(id) {
             const s = staffList.find(x => x.uniqueId === id);
+            if (!s) return;
             editingUniqueId = id;
             document.getElementById('modal-title').innerText = "スタッフ編集";
             document.getElementById('staff-id-input').value = s.empId;
@@ -132,21 +155,30 @@
             document.getElementById('staff-modal').classList.remove('hidden');
         }
 
-        function closeModal() { document.getElementById('staff-modal').classList.add('hidden'); }
+        function closeModal() { 
+            document.getElementById('staff-modal').classList.add('hidden'); 
+        }
 
         function saveStaff() {
             const data = {
-                empId: document.getElementById('staff-id-input').value,
-                name: document.getElementById('staff-name-input').value,
+                empId: document.getElementById('staff-id-input').value.trim(),
+                name: document.getElementById('staff-name-input').value.trim(),
                 store: document.getElementById('staff-store-input').value,
-                note: document.getElementById('staff-note-input').value
+                note: document.getElementById('staff-note-input').value.trim()
             };
+
+            if (!data.name) {
+                alert("スタッフ名を入力してください。");
+                return;
+            }
+
             if (editingUniqueId) {
                 const s = staffList.find(x => x.uniqueId === editingUniqueId);
-                Object.assign(s, data);
+                if (s) Object.assign(s, data);
             } else {
                 staffList.push({ uniqueId: Date.now(), ...data });
             }
+            
             localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
             closeModal();
             renderTable();
