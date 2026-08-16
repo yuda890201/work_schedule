@@ -14,7 +14,7 @@
             <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
         </div>
 
-        <!-- シフト管理バー（追加・選択・削除） -->
+        <!-- シフト管理バー（追加・編集・選択・削除） -->
         <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
                 <label class="font-bold text-slate-700 text-sm">対象シフト:</label>
@@ -24,10 +24,13 @@
             </div>
             <div class="flex items-center gap-2">
                 <button onclick="openShiftModal()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
-                    <i data-lucide="plus" class="w-4 h-4"></i> 新しいシフト枠を追加
+                    <i data-lucide="plus" class="w-4 h-4"></i> 新規シフト追加
+                </button>
+                <button onclick="openEditShiftModal()" class="px-3 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 flex items-center gap-1">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i> シフト編集
                 </button>
                 <button onclick="deleteCurrentShift()" class="px-3 py-2 bg-red-50 text-red-600 font-bold rounded-lg text-sm hover:bg-red-100 border border-red-200">
-                    現在のシフトを削除
+                    シフト削除
                 </button>
             </div>
         </div>
@@ -48,10 +51,10 @@
         </div>
     </div>
 
-    <!-- シフト追加モーダル -->
+    <!-- シフト追加・編集モーダル -->
     <div id="shift-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
-            <h3 class="font-bold text-lg text-slate-800">新規シフト枠の追加</h3>
+            <h3 id="modal-title" class="font-bold text-lg text-slate-800">新規シフト枠の追加</h3>
             <div class="space-y-3">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">シフト名（例: 遅番シフト）</label>
@@ -60,17 +63,17 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">開始時間 (時)</label>
-                        <input type="number" id="new-shift-start" class="w-full p-2 border rounded-lg font-bold" value="13" min="0" max="23">
+                        <input type="number" id="new-shift-start" class="w-full p-2 border rounded-lg font-bold" min="0" max="23">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">終了時間 (時)</label>
-                        <input type="number" id="new-shift-end" class="w-full p-2 border rounded-lg font-bold" value="17" min="1" max="24">
+                        <input type="number" id="new-shift-end" class="w-full p-2 border rounded-lg font-bold" min="1" max="24">
                     </div>
                 </div>
             </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeShiftModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
-                <button onclick="saveNewShift()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">追加する</button>
+                <button onclick="saveShift()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">保存する</button>
             </div>
         </div>
     </div>
@@ -95,6 +98,7 @@
             "s1": { name: "朝シフト (8:00〜12:00)", start: 8, end: 12, tasks: { 8: [], 9: [], 10: [], 11: [] } }
         };
         let currentShiftKey = Object.keys(shiftsData)[0] || "s1";
+        let isEditing = false;
 
         function saveShifts() {
             localStorage.setItem('ws_shifts_data', JSON.stringify(shiftsData));
@@ -188,11 +192,30 @@
             renderBoard();
         }
 
-        // シフト枠追加・削除モーダル制御
-        function openShiftModal() { document.getElementById('shift-modal').classList.remove('hidden'); }
+        // シフト枠追加・編集モーダル制御
+        function openShiftModal() {
+            isEditing = false;
+            document.getElementById('modal-title').innerText = "新規シフト枠の追加";
+            document.getElementById('new-shift-name').value = "";
+            document.getElementById('new-shift-start').value = "8";
+            document.getElementById('new-shift-end').value = "12";
+            document.getElementById('shift-modal').classList.remove('hidden');
+        }
+
+        function openEditShiftModal() {
+            isEditing = true;
+            const current = shiftsData[currentShiftKey];
+            if (!current) return;
+            document.getElementById('modal-title').innerText = "シフト枠の編集";
+            document.getElementById('new-shift-name').value = current.name;
+            document.getElementById('new-shift-start').value = current.start;
+            document.getElementById('new-shift-end').value = current.end;
+            document.getElementById('shift-modal').classList.remove('hidden');
+        }
+
         function closeShiftModal() { document.getElementById('shift-modal').classList.add('hidden'); }
 
-        function saveNewShift() {
+        function saveShift() {
             const name = document.getElementById('new-shift-name').value.trim();
             const start = parseInt(document.getElementById('new-shift-start').value);
             const end = parseInt(document.getElementById('new-shift-end').value);
@@ -202,14 +225,26 @@
                 return;
             }
 
-            const newKey = 's_' + Date.now();
-            const tasksObj = {};
-            for (let h = start; h < end; h++) {
-                tasksObj[h] = [];
+            if (isEditing) {
+                const current = shiftsData[currentShiftKey];
+                current.name = name;
+                const newTasksObj = {};
+                for (let h = start; h < end; h++) {
+                    newTasksObj[h] = current.tasks[h] || [];
+                }
+                current.start = start;
+                current.end = end;
+                current.tasks = newTasksObj;
+            } else {
+                const newKey = 's_' + Date.now();
+                const tasksObj = {};
+                for (let h = start; h < end; h++) {
+                    tasksObj[h] = [];
+                }
+                shiftsData[newKey] = { name, start, end, tasks: tasksObj };
+                currentShiftKey = newKey;
             }
 
-            shiftsData[newKey] = { name, start, end, tasks: tasksObj };
-            currentShiftKey = newKey;
             saveShifts();
             closeShiftModal();
             renderBoard();
