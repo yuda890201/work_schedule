@@ -18,7 +18,6 @@
             </div>
             <div class="flex items-center gap-4">
                 <span id="store-name-display" class="text-xs bg-blue-600 px-2.5 py-1 rounded-full font-bold"></span>
-                <!-- 現在時刻をリアルタイム表示 -->
                 <div id="realtime-clock" class="font-mono text-emerald-400 font-bold text-xl">00:00:00</div>
             </div>
         </div>
@@ -50,16 +49,13 @@
     <script>
         lucide.createIcons();
         
-        // 1. 店舗とシフトデータの連動読み込み
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }];
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
         document.getElementById('store-name-display').innerText = currentStore.name;
 
-        // スタッフリストの読み込み
         const staffList = JSON.parse(localStorage.getItem('ws_staff_list')) || [];
 
-        // タスクマスター
         const rawMasterTasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [];
         const taskMasterMap = {};
         rawMasterTasks.forEach(t => { 
@@ -68,7 +64,6 @@
             }
         });
 
-        // 店舗別シフトデータの読み込み
         const storageKey = `ws_shifts_data_${currentStoreId}`;
         const SHIFT_DATA = JSON.parse(localStorage.getItem(storageKey)) || {
             "s1": { 
@@ -90,24 +85,23 @@
         let currentShiftKey = Object.keys(SHIFT_DATA)[0];
         let currentShift = SHIFT_DATA[currentShiftKey];
 
-        // 状態管理（各レジのフェーズ開始時間と、タスクごとの所要時間を記録する object を追加）
+        // 状態管理
         let state = { 
             r1: [], r2: [], 
             r1Times: {}, r2Times: {}, // タスク名: 所要時間(秒)
-            r1StartTime: Date.now(), // レジごとの現在フェーズ開始時刻
+            r1LastCompleteTime: Date.now(), // 直近のタスク完了時刻（またはフェーズ開始時刻）
+            r2LastCompleteTime: Date.now(),
+            r1StartTime: Date.now(), 
             r2StartTime: Date.now(),
             r1Staff: staffList.length > 0 ? staffList[0].name : "未選択",
             r2Staff: staffList.length > 1 ? staffList[1].name : "未選択",
             currentHour: currentShift.start 
         }; 
 
-        // リアルタイムクロック & 各レジのタスクタイマー更新
         setInterval(() => {
-            // 1. 上部ヘッダーの現在時刻リアルタイム表示
             const now = new Date();
             document.getElementById('realtime-clock').innerText = now.toTimeString().split(' ')[0];
 
-            // 2. 各レジの現フェーズ枠内にあるタイマーを更新
             updateRegTimer('r1', state.r1StartTime);
             updateRegTimer('r2', state.r2StartTime);
         }, 1000);
@@ -130,6 +124,8 @@
             state.r2Times = {};
             state.r1StartTime = Date.now();
             state.r2StartTime = Date.now();
+            state.r1LastCompleteTime = Date.now();
+            state.r2LastCompleteTime = Date.now();
             renderApp();
         }
 
@@ -220,10 +216,9 @@
             lucide.createIcons();
         }
 
-        // タスククリック時の処理（モーダル表示前にクリック時刻を一時記憶、またはモーダル用データ準備）
-        let tempTaskClickInfo = null;
-
         function handleTaskClick(regKey, taskName) {
+            if (state[regKey].includes(taskName)) return; // 完了済みの場合は何もしない
+
             const trimmedName = taskName.trim();
             let subs = taskMasterMap[trimmedName];
             
@@ -231,7 +226,6 @@
                 subs = ["実施確認", "完了確認"];
             }
             
-            tempTaskClickInfo = { regKey, taskName, clickTime: Date.now() };
             openModal(regKey, taskName, subs);
         }
 
@@ -269,16 +263,27 @@
         }
 
         function confirmTask() {
-            if (tempTaskClickInfo && !state[state.activeReg].includes(state.activeTask)) {
-                state[state.activeReg].push(state.activeTask);
-                // かかった時間を計算（秒単位）
-                const duration = Math.floor((Date.now() - tempTaskClickInfo.clickTime) / 1000);
-                if (state.activeReg === 'r1') {
-                    state.r1Times[state.activeTask] = duration;
+            const regKey = state.activeReg;
+            const taskName = state.activeTask;
+
+            if (!state[regKey].includes(taskName)) {
+                const nowTime = Date.now();
+                const lastTime = regKey === 'r1' ? state.r1LastCompleteTime : state.r2LastCompleteTime;
+                
+                // 所要時間（前回完了時刻、またはフェーズ開始時刻から今までの秒数）
+                const duration = Math.floor((nowTime - lastTime) / 1000);
+
+                if (regKey === 'r1') {
+                    state.r1Times[taskName] = duration;
+                    state.r1LastCompleteTime = nowTime;
                 } else {
-                    state.r2Times[state.activeTask] = duration;
+                    state.r2Times[taskName] = duration;
+                    state.r2LastCompleteTime = nowTime;
                 }
+
+                state[regKey].push(taskName);
             }
+
             document.getElementById('task-modal').classList.add('hidden');
             renderApp();
         }
@@ -286,16 +291,21 @@
         function nextHour(regKey) {
             if (state.currentHour < currentShift.end - 1) {
                 state.currentHour += 1;
-                // レジごとにフェーズ開始時刻をリセット
-                if (regKey === 'r1') state.r1StartTime = Date.now();
-                if (regKey === 'r2') state.r2StartTime = Date.now();
+                const nowTime = Date.now();
+                if (regKey === 'r1') {
+                    state.r1StartTime = nowTime;
+                    state.r1LastCompleteTime = nowTime;
+                }
+                if (regKey === 'r2') {
+                    state.r2StartTime = nowTime;
+                    state.r2LastCompleteTime = nowTime;
+                }
                 renderApp();
             } else {
                 alert("このシフトの最終時間です！お疲れ様でした。");
             }
         }
 
-        // 初期化実行
         renderApp();
     </script>
 </body>
