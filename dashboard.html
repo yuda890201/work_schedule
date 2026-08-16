@@ -2,19 +2,135 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>メインダッシュボード</title>
+    <title>店舗管理ダッシュボード</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body class="bg-slate-100 min-h-screen p-8">
-    <div class="max-w-4xl mx-auto space-y-8">
-        <h1 class="text-3xl font-bold">ダッシュボード</h1>
-        <div class="grid grid-cols-2 gap-4">
-            <a href="index.html" class="p-6 bg-white rounded-xl shadow border">作業入力</a>
-            <a href="shift_assignment_v4.html" class="p-6 bg-white rounded-xl shadow border">シフト割当</a>
-            <a href="task_management.html" class="p-6 bg-white rounded-xl shadow border">タスク管理</a>
-            <a href="staff_management.html" class="p-6 bg-white rounded-xl shadow border">スタッフ管理</a>
+<body class="bg-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        <!-- ヘルパー＆店舗切替バー -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-slate-700 text-sm">対象店舗:</span>
+                <select id="store-select" onchange="changeStore(this.value)" class="p-2 border rounded-lg font-bold bg-slate-50 text-slate-800">
+                    <!-- 動的に生成されます -->
+                </select>
+            </div>
+            <button onclick="openStoreModal()" class="px-4 py-2 bg-slate-800 text-white font-bold rounded-lg text-sm hover:bg-slate-700 flex items-center gap-1">
+                <i data-lucide="plus" class="w-4 h-4"></i> 新規店舗追加
+            </button>
+        </div>
+
+        <!-- メインコンテンツ（各画面へのリンクカード） -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- カード1: 作業入力 -->
+            <div onclick="window.location.href='index.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-blue-50 text-blue-600 rounded-xl">
+                    <i data-lucide="pen-tool" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">WS作業入力ポータル</h3>
+                    <p class="text-xs text-slate-500">現在の店舗のシフト作業・進捗を入力します</p>
+                </div>
+            </div>
+
+            <!-- カード2: シフト割当 -->
+            <div onclick="window.location.href='shift_assignment_v4.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <i data-lucide="calendar" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">シフト割当管理</h3>
+                    <p class="text-xs text-slate-500">店舗ごとの時間帯別タスク配置を作成します</p>
+                </div>
+            </div>
+
+            <!-- カード3: タスク管理 -->
+            <div onclick="window.location.href='task_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-amber-50 text-amber-600 rounded-xl">
+                    <i data-lucide="check-square" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">タスク管理マスター</h3>
+                    <p class="text-xs text-slate-500">店舗共通の作業マスターやサブタスクを編集します</p>
+                </div>
+            </div>
+
+            <!-- カード4: スタッフ管理 -->
+            <div onclick="window.location.href='staff_management.html'" class="bg-white p-6 rounded-2xl shadow-sm border hover:border-blue-400 hover:shadow-md transition cursor-pointer flex items-center gap-4">
+                <div class="p-4 bg-purple-50 text-purple-600 rounded-xl">
+                    <i data-lucide="users" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">スタッフ管理</h3>
+                    <p class="text-xs text-slate-500">スタッフ名簿や権限を管理します</p>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- 店舗追加モーダル -->
+    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
+            <h3 class="font-bold text-lg text-slate-800">新規店舗の追加</h3>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">店舗名（例: 博多駅前店）</label>
+                <input type="text" id="new-store-name" class="w-full p-2 border rounded-lg font-bold" placeholder="例: 博多駅前店">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeStoreModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">キャンセル</button>
+                <button onclick="saveNewStore()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700">追加する</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // 店舗マスターの初期化 (LocalStorage)
+        let storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [
+            { id: "store_1", name: "1号店 (本店)" }
+        ];
+        let currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
+
+        function renderStoreSelect() {
+            const select = document.getElementById('store-select');
+            select.innerHTML = storesMaster.map(s => `
+                <option value="${s.id}" ${s.id === currentStoreId ? 'selected' : ''}>${s.name}</option>
+            `).join('');
+        }
+
+        function changeStore(storeId) {
+            currentStoreId = storeId;
+            localStorage.setItem('ws_current_store_id', storeId);
+        }
+
+        function openStoreModal() {
+            document.getElementById('new-store-name').value = "";
+            document.getElementById('store-modal').classList.remove('hidden');
+        }
+
+        function closeStoreModal() {
+            document.getElementById('store-modal').classList.add('hidden');
+        }
+
+        function saveNewStore() {
+            const name = document.getElementById('new-store-name').value.trim();
+            if (!name) {
+                alert("店舗名を入力してください");
+                return;
+            }
+            const newId = 'store_' + Date.now();
+            storesMaster.push({ id: newId, name: name });
+            localStorage.setItem('ws_stores_master', JSON.stringify(storesMaster));
+            currentStoreId = newId;
+            localStorage.setItem('ws_current_store_id', newId);
+            closeStoreModal();
+            renderStoreSelect();
+        }
+
+        renderStoreSelect();
+    </script>
 </body>
 </html>
