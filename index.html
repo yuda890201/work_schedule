@@ -328,13 +328,12 @@
                     state.r1Times[taskName] = durationSec;
                     state.r1LastCompleteTime = nowTime;
                 } else {
-                    state.r2Times[taskName] = duration;
+                    state.r2Times[taskName] = durationSec; // 修正点: duration から durationSec に統一
                     state.r2LastCompleteTime = nowTime;
                 }
 
                 state[regKey].push(taskName);
 
-                // サーバー（スプレッドシートの logs シート）へ完了ログを送信
                 const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
                 const logData = {
                     sheet: "logs",
