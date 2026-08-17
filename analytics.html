@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作業分析・集計</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-slate-800">作業実施率・分析ダッシュボード</h2>
+            <button onclick="window.location.href='dashboard.html'" class="text-slate-500 hover:text-slate-900 font-bold">ダッシュボードへ戻る</button>
+        </div>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="bg-white p-8 rounded-xl shadow-sm border text-center font-bold text-slate-500">
+            クラウドから作業ログを読み込み中...
+        </div>
+
+        <!-- メイン集計コンテンツ -->
+        <div id="analytics-content" class="space-y-6 hidden">
+            <!-- サマリーカード -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-xl shadow-sm border space-y-1">
+                    <p class="text-xs font-bold text-slate-400">総作業完了数</p>
+                    <p id="total-tasks-count" class="text-3xl font-bold font-mono text-slate-800">0件</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border space-y-1">
+                    <p class="text-xs font-bold text-slate-400">参加スタッフ数</p>
+                    <p id="total-staff-count" class="text-3xl font-bold font-mono text-blue-600">0名</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border space-y-1">
+                    <p class="text-xs font-bold text-slate-400">対象店舗数</p>
+                    <p id="total-stores-count" class="text-3xl font-bold font-mono text-emerald-600">0店舗</p>
+                </div>
+            </div>
+
+            <!-- スタッフ別集計テーブル -->
+            <div class="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 class="font-bold text-lg text-slate-800 border-b pb-2">スタッフ別 タスク完了数・平均所要時間</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b text-slate-500 text-xs font-bold">
+                                <th class="p-3">スタッフ名</th>
+                                <th class="p-3 text-center">完了タスク数</th>
+                                <th class="p-3 text-right">平均所要時間</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-summary-body" class="divide-y text-sm text-slate-700">
+                            <!-- 動的生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 最近の作業ログ一覧 -->
+            <div class="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 class="font-bold text-lg text-slate-800 border-b pb-2">直近の作業ログ</h3>
+                <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b text-slate-500 text-xs font-bold sticky top-0">
+                                <th class="p-3">日時</th>
+                                <th class="p-3">店舗</th>
+                                <th class="p-3">シフト / レジ</th>
+                                <th class="p-3">担当者</th>
+                                <th class="p-3">タスク名</th>
+                                <th class="p-3 text-right">所要時間</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body" class="divide-y text-xs text-slate-600">
+                            <!-- 動的生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // ★ここにGASのウェブアプリURLを設定してください
+        const GAS_API_URL = "YOUR_GAS_WEB_APP_URL";
+
+        async function fetchAnalyticsData() {
+            try {
+                // スプレッドシートの logs シートからデータを取得
+                const res = await fetch(`${GAS_API_URL}?sheet=logs`);
+                const logs = await res.json();
+
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    document.getElementById('loading').innerText = "まだ作業ログが記録されていません。作業入力ポータルからタスクを完了させてください。";
+                    return;
+                }
+
+                // サマリー計算
+                document.getElementById('total-tasks-count').innerText = logs.length + "件";
+                
+                const uniqueStaff = [...new Set(logs.map(l => l.staff).filter(s => s && s !== "未選択"))];
+                document.getElementById('total-staff-count').innerText = uniqueStaff.length + "名";
+
+                const uniqueStores = [...new Set(logs.map(l => l.store).filter(Boolean))];
+                document.getElementById('total-stores-count').innerText = uniqueStores.length + "店舗";
+
+                // スタッフ別集計データの作成
+                const staffMap = {};
+                logs.forEach(l => {
+                    const staff = l.staff || "未選択";
+                    if (!staffMap[staff]) {
+                        staffMap[staff] = { count: 0, totalSec: 0 };
+                    }
+                    staffMap[staff].count += 1;
+                    staffMap[staff].totalSec += Number(l.duration_sec) || 0;
+                });
+
+                const staffSummaryBody = document.getElementById('staff-summary-body');
+                staffSummaryBody.innerHTML = Object.keys(staffMap).map(staff => {
+                    const data = staffMap[staff];
+                    const avgSec = Math.round(data.totalSec / data.count);
+                    const avgMin = Math.floor(avgSec / 60);
+                    const avgS = avgSec % 60;
+                    const avgStr = avgMin > 0 ? `${avgMin}分${avgS}秒` : `${avgS}秒`;
+
+                    return `
+                        <tr class="hover:bg-slate-50">
+                            <td class="p-3 font-bold">${staff}</td>
+                            <td class="p-3 text-center font-mono font-bold text-blue-600">${data.count}件</td>
+                            <td class="p-3 text-right font-mono">${avgStr}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // 直近のログ一覧（新しい順）
+                const sortedLogs = [...logs].reverse();
+                const logsTableBody = document.getElementById('logs-table-body');
+                logsTableBody.innerHTML = sortedLogs.slice(0, 50).map(l => {
+                    const sec = Number(l.duration_sec) || 0;
+                    const timeStr = `${Math.floor(sec/60)}分${sec%60}秒`;
+
+                    return `
+                        <tr class="hover:bg-slate-50">
+                            <td class="p-3 whitespace-nowrap text-slate-400">${l.timestamp || '-'}</td>
+                            <td class="p-3 font-bold">${l.store || '-'}</td>
+                            <td class="p-3">${l.shift || ''} (${l.reg || ''})</td>
+                            <td class="p-3 font-bold text-slate-800">${l.staff || '-'}</td>
+                            <td class="p-3 font-bold text-blue-600">${l.task || '-'}</td>
+                            <td class="p-3 text-right font-mono">${timeStr}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('analytics-content').classList.remove('hidden');
+
+            } catch (error) {
+                console.error("分析データ取得エラー:", error);
+                document.getElementById('loading').innerText = "ログデータの取得に失敗しました。";
+            }
+        }
+
+        fetchAnalyticsData();
+    </script>
+</body>
+</html>
