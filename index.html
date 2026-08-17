@@ -104,7 +104,16 @@
                         <div id="report-r2-tasks" class="space-y-1"></div>
                     </div>
                 </div>
-                <div class="pt-8 border-t flex justify-between text-xs text-slate-400">
+
+                <!-- コメント欄（定型文自動挿入エリア） -->
+                <div class="border rounded-lg p-3 bg-amber-50/50 space-y-1">
+                    <h4 class="font-bold text-xs text-amber-800">【作業時間に関する確認とフィードバック】</h4>
+                    <p id="report-feedback-comment" class="text-[11px] text-slate-700 leading-relaxed">
+                        本シートに記録された作業時間のうち、標準時間と比較して著しく短いもの、または十分な確認を行わずに完了したと見受けられる項目が確認されました。各タスクに定められた手順やサブタスク（温度確認や品質チェックなど）は、店舗の安全・品質維持のために必須の工程です。タイマー消化や形骸化したチェックを目的とせず、手順に沿った確実な実施と適正な時間の確保を徹底してください。
+                    </p>
+                </div>
+
+                <div class="pt-6 border-t flex justify-between text-xs text-slate-400">
                     <p>管理者確認印: ___________________</p>
                     <p>WS作業入力ポータルシステム</p>
                 </div>
@@ -449,7 +458,6 @@
             }
         }
 
-        // 印刷プレビューを開く
         function openPrintPreview() {
             document.getElementById('report-store-date').innerText = `店舗: ${currentStore.name} ／ 実施日: ${new Date().toLocaleDateString()}`;
             document.getElementById('report-shift-name').innerText = currentShift.name;
