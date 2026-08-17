@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - 印刷対応版</title>
+    <title>WS作業入力ポータル - 報告フィードバック版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* 印刷時のレイアウト調整 (A4サイズ1枚に収める) */
         @media print {
             body * { visibility: hidden; }
             #print-report-area, #print-report-area * { visibility: visible; }
@@ -79,41 +78,32 @@
     <div id="print-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-lg text-slate-800">シフト作業報告シート（プレビュー）</h3>
+                <h3 class="font-bold text-lg text-slate-800">シフト作業報告シート（フィードバック付き）</h3>
                 <button onclick="closePrintPreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             <!-- 印刷対象エリア -->
-            <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-sm">
-                <div class="text-center border-b pb-4 space-y-1">
-                    <h2 class="text-xl font-bold">シフト作業実施報告書</h2>
-                    <p id="report-store-date" class="text-xs text-slate-500"></p>
+            <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-xs">
+                <div class="text-center border-b pb-3 space-y-1">
+                    <h2 class="text-base font-bold">シフト作業実施報告書 兼 フィードバック</h2>
+                    <p id="report-store-date" class="text-[10px] text-slate-500"></p>
                 </div>
-                <div class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border text-xs">
+                <div class="grid grid-cols-2 gap-4 bg-slate-50 p-2.5 rounded-lg border">
                     <div><span class="font-bold text-slate-500">対象シフト:</span> <span id="report-shift-name" class="font-bold"></span></div>
                     <div><span class="font-bold text-slate-500">出力日時:</span> <span id="report-output-time"></span></div>
-                    <div><span class="font-bold text-slate-500">1レジ担当者:</span> <span id="report-r1-staff" class="font-bold text-blue-600"></span></div>
-                    <div><span class="font-bold text-slate-500">2レジ担当者:</span> <span id="report-r2-staff" class="font-bold text-emerald-600"></span></div>
+                    <div><span class="font-bold text-slate-500">1レジ担当:</span> <span id="report-r1-staff" class="font-bold text-blue-600"></span></div>
+                    <div><span class="font-bold text-slate-500">2レジ担当:</span> <span id="report-r2-staff" class="font-bold text-emerald-600"></span></div>
                 </div>
-                <div class="space-y-4">
+                <div class="space-y-3">
                     <div>
-                        <h4 class="font-bold text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mb-2">1レジ 実施タスク一覧</h4>
+                        <h4 class="font-bold text-[11px] bg-blue-100 text-blue-800 px-2 py-1 rounded mb-1">1レジ 実施タスク分析</h4>
                         <div id="report-r1-tasks" class="space-y-1"></div>
                     </div>
                     <div>
-                        <h4 class="font-bold text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded mb-2">2レジ 実施タスク一覧</h4>
+                        <h4 class="font-bold text-[11px] bg-emerald-100 text-emerald-800 px-2 py-1 rounded mb-1">2レジ 実施タスク分析</h4>
                         <div id="report-r2-tasks" class="space-y-1"></div>
                     </div>
                 </div>
-
-                <!-- コメント欄（定型文自動挿入エリア） -->
-                <div class="border rounded-lg p-3 bg-amber-50/50 space-y-1">
-                    <h4 class="font-bold text-xs text-amber-800">【作業時間に関する確認とフィードバック】</h4>
-                    <p id="report-feedback-comment" class="text-[11px] text-slate-700 leading-relaxed">
-                        本シートに記録された作業時間のうち、標準時間と比較して著しく短いもの、または十分な確認を行わずに完了したと見受けられる項目が確認されました。各タスクに定められた手順やサブタスク（温度確認や品質チェックなど）は、店舗の安全・品質維持のために必須の工程です。タイマー消化や形骸化したチェックを目的とせず、手順に沿った確実な実施と適正な時間の確保を徹底してください。
-                    </p>
-                </div>
-
-                <div class="pt-6 border-t flex justify-between text-xs text-slate-400">
+                <div class="pt-6 border-t flex justify-between text-[10px] text-slate-400">
                     <p>管理者確認印: ___________________</p>
                     <p>WS作業入力ポータルシステム</p>
                 </div>
@@ -130,7 +120,6 @@
     <script>
         lucide.createIcons();
         
-        // ★ここにGASのウェブアプリURLを設定してください
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
 
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
@@ -139,7 +128,8 @@
         document.getElementById('store-name-display').innerText = currentStore.name;
 
         let staffList = [];
-        let taskMasterMap = {};
+        let taskMasterMap = {};       // タスク名 -> サブタスク配列
+        let taskStandardTimes = {};   // タスク名 -> 標準時間（秒）
         let SHIFT_DATA = {};
         let currentShiftKey = "";
         let currentShift = null;
@@ -167,7 +157,11 @@
                 if (Array.isArray(taskData)) {
                     taskData.forEach(t => { 
                         if (t && t.name) {
-                            taskMasterMap[t.name.trim()] = typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || []); 
+                            const tName = t.name.trim();
+                            taskMasterMap[tName] = typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || []); 
+                            // 標準時間が設定されている場合は保持（デフォルト300秒=5分などを例として未設定時は持たないか、プロパティ標準を見る）
+                            // ここではスプレッドシートに 'standard_sec' 列があればそれを読み込む、なければデフォルト
+                            taskStandardTimes[tName] = Number(t.standard_sec) || 0; 
                         }
                     });
                 }
@@ -458,6 +452,7 @@
             }
         }
 
+        // 印刷プレビューおよびフィードバック生成
         function openPrintPreview() {
             document.getElementById('report-store-date').innerText = `店舗: ${currentStore.name} ／ 実施日: ${new Date().toLocaleDateString()}`;
             document.getElementById('report-shift-name').innerText = currentShift.name;
@@ -465,52 +460,65 @@
             document.getElementById('report-r1-staff').innerText = state.r1Staff;
             document.getElementById('report-r2-staff').innerText = state.r2Staff;
 
-            // 1レジのタスク一覧生成
-            const r1AllTasks = [...new Set(Object.values(currentShift.tasks.r1 || {}).flat())];
-            const r1Container = document.getElementById('report-r1-tasks');
-            if (r1AllTasks.length === 0) {
-                r1Container.innerHTML = '<p class="text-xs text-slate-400">タスクなし</p>';
-            } else {
-                r1Container.innerHTML = r1AllTasks.map(name => {
-                    const isDone = state.r1.includes(name);
-                    const sec = state.r1Times[name];
-                    const timeStr = (isDone && sec !== undefined) ? ` (${Math.floor(sec/60)}分${sec%60}秒)` : '';
-                    return `
-                        <div class="flex justify-between items-center text-xs border-b border-slate-100 py-1">
-                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
-                            <span class="font-mono text-slate-500">${isDone ? '完了' + timeStr : '未完了'}</span>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            // 2レジのタスク一覧生成
-            const r2AllTasks = [...new Set(Object.values(currentShift.tasks.r2 || {}).flat())];
-            const r2Container = document.getElementById('report-r2-tasks');
-            if (r2AllTasks.length === 0) {
-                r2Container.innerHTML = '<p class="text-xs text-slate-400">タスクなし</p>';
-            } else {
-                r2Container.innerHTML = r2AllTasks.map(name => {
-                    const isDone = state.r2.includes(name);
-                    const sec = state.r2Times[name];
-                    const timeStr = (isDone && sec !== undefined) ? ` (${Math.floor(sec/60)}分${sec%60}秒)` : '';
-                    return `
-                        <div class="flex justify-between items-center text-xs border-b border-slate-100 py-1">
-                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
-                            <span class="font-mono text-slate-500">${isDone ? '完了' + timeStr : '未完了'}</span>
-                        </div>
-                    `;
-                }).join('');
-            }
+            renderReportTasks('r1', currentShift.tasks.r1, state.r1, state.r1Times, 'report-r1-tasks');
+            renderReportTasks('r2', currentShift.tasks.r2, state.r2, state.r2Times, 'report-r2-tasks');
 
             document.getElementById('print-modal').classList.remove('hidden');
+        }
+
+        function renderReportTasks(regKey, regTasksByHour, completedList, timesMap, containerId) {
+            const container = document.getElementById(containerId);
+            const allTasks = [...new Set(Object.values(regTasksByHour || {}).flat())];
+
+            if (allTasks.length === 0) {
+                container.innerHTML = '<p class="text-[10px] text-slate-400">タスクなし</p>';
+                return;
+            }
+
+            container.innerHTML = allTasks.map(name => {
+                const isDone = completedList.includes(name);
+                const actualSec = timesMap[name];
+                const standardSec = taskStandardTimes[name] || 0; // 標準時間（未設定なら0）
+
+                let feedbackHtml = '';
+
+                // 作業時間が設定されていない（standardSec === 0）、または未完了の場合は何も表示しない
+                if (isDone && standardSec > 0 && actualSec !== undefined) {
+                    const diffSec = actualSec - standardSec; // プラスなら遅い、マイナスなら早い
+                    const diffMin = Math.abs(Math.floor(diffSec / 60));
+                    const diffS = Math.abs(diffSec % 60);
+                    const diffStr = diffMin > 0 ? `${diffMin}分${diffS}秒` : `${diffS}秒`;
+
+                    // 著しく短い（標準時間の30%未満、かつ30秒以上早いなど）場合の警告文
+                    if (actualSec < standardSec * 0.3 && standardSec >= 60) {
+                        feedbackHtml = `<span class="text-red-600 font-bold bg-red-50 px-1 rounded">⚠️ 規定より著しく短いです。手順の抜け漏れがないか確認してください。</span>`;
+                    } else if (diffSec > 60) {
+                        feedbackHtml = `<span class="text-amber-600">標準より ${diffStr} 遅延</span>`;
+                    } else if (diffSec < -60) {
+                        feedbackHtml = `<span class="text-blue-600">標準より ${diffStr} スムーズ</span>`;
+                    } else {
+                        feedbackHtml = `<span class="text-emerald-600">標準的ペース</span>`;
+                    }
+                }
+
+                const timeStr = (isDone && actualSec !== undefined) ? `実測: ${Math.floor(actualSec/60)}分${actualSec%60}秒` : '未完了';
+
+                return `
+                    <div class="flex flex-col border-b border-slate-100 py-1 text-[11px]">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
+                            <span class="font-mono text-slate-500">${timeStr}</span>
+                        </div>
+                        ${feedbackHtml ? `<div class="mt-0.5 text-[10px] pl-4">${feedbackHtml}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
         }
 
         function closePrintPreview() {
             document.getElementById('print-modal').classList.add('hidden');
         }
 
-        // 初期化実行
         initPortal();
     </script>
 </body>
