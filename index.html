@@ -76,7 +76,7 @@
         </div>
     </main>
 
-    <!-- サブタスク用モーダル（キャンセルボタン追加） -->
+    <!-- サブタスク用モーダル（スキップ・キャンセルボタン付き） -->
     <div id="task-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-xl">
             <div class="flex justify-between items-center border-b pb-2">
@@ -84,9 +84,10 @@
                 <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
             <div id="subtask-list" class="space-y-2"></div>
-            <div class="flex gap-2 pt-2">
-                <button onclick="closeModal()" class="w-1/3 p-3 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 transition">キャンセル</button>
-                <button id="complete-btn" onclick="confirmTask()" disabled class="w-2/3 p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition">すべて完了して保存</button>
+            <div class="grid grid-cols-3 gap-2 pt-2">
+                <button onclick="closeModal()" class="p-3 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 transition text-xs">キャンセル</button>
+                <button onclick="skipTask()" class="p-3 rounded-xl bg-amber-100 text-amber-800 font-bold hover:bg-amber-200 transition text-xs">見送り(スキップ)</button>
+                <button id="complete-btn" onclick="confirmTask()" disabled class="p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition text-xs">すべて完了</button>
             </div>
         </div>
     </div>
@@ -162,7 +163,6 @@
 
         showLoading();
 
-        // ★ここにGASのウェブアプリURLを設定してください
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
 
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
@@ -183,6 +183,7 @@
         let state = JSON.parse(localStorage.getItem(stateKey)) || { 
             r1: [], r2: [], 
             r1Times: {}, r2Times: {}, 
+            r1Skips: [], r2Skips: [], // スキップされたタスクを保持
             r1LastCompleteTime: Date.now(), 
             r2LastCompleteTime: Date.now(),
             r1StartTime: Date.now(), 
@@ -192,6 +193,10 @@
             r1Hour: 8, 
             r2Hour: 8  
         }; 
+
+        // スキッププロパティがない場合のフォールバック
+        if (!state.r1Skips) state.r1Skips = [];
+        if (!state.r2Skips) state.r2Skips = [];
 
         function saveLocalState() {
             localStorage.setItem(stateKey, JSON.stringify(state));
@@ -217,7 +222,6 @@
                     });
                 }
 
-                // 店舗ごとに完全に独立したシフトシートを読み込み
                 const sheetName = `shifts_${currentStoreId}`;
                 const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
                 const shiftDataJson = await shiftRes.json();
@@ -292,6 +296,8 @@
             state.r2Hour = currentShift.start;
             state.r1 = [];
             state.r2 = [];
+            state.r1Skips = [];
+            state.r2Skips = [];
             state.r1Times = {};
             state.r2Times = {};
             state.r1StartTime = Date.now();
@@ -321,6 +327,9 @@
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
             const currentTasks = regTasksByHour[currentHour] || [];
             const timesMap = regKey === 'r1' ? state.r1Times : state.r2Times;
+            const completedList = regKey === 'r1' ? state.r1 : state.r2;
+            const skippedList = regKey === 'r1' ? state.r1Skips : state.r2Skips;
+
             const startTime = regKey === 'r1' ? state.r1StartTime : state.r2StartTime;
             const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
             const initialElapsedStr = new Date(initialElapsed * 1000).toISOString().substr(11, 8);
@@ -331,12 +340,18 @@
 
             container.innerHTML = `
                 <div class="flex flex-col gap-2 shrink-0 w-28">
-                    ${allTaskNames.map(name => `
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-10 rounded-full ${state[regKey].includes(name) ? 'bg-emerald-500' : 'bg-slate-300'}"></div>
-                            <span class="text-[10px] font-bold text-slate-500 truncate" title="${name}">${name}</span>
-                        </div>
-                    `).join('')}
+                    ${allTaskNames.map(name => {
+                        let dotColor = 'bg-slate-300';
+                        if (completedList.includes(name)) dotColor = 'bg-emerald-500';
+                        else if (skippedList.includes(name)) dotColor = 'bg-amber-400';
+
+                        return `
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-10 rounded-full ${dotColor}"></div>
+                                <span class="text-[10px] font-bold text-slate-500 truncate" title="${name}">${name}</span>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
                 
                 <div class="flex-1 space-y-4">
@@ -362,28 +377,37 @@
                     ${currentTasks.length === 0 ? '<p class="text-xs text-slate-400 py-4">この時間の割当タスクはありません</p>' : ''}
 
                     ${currentTasks.map(name => {
-                        const isCompleted = state[regKey].includes(name);
+                        const isCompleted = completedList.includes(name);
+                        const isSkipped = skippedList.includes(name);
                         const durationSec = timesMap[name];
-                        let timeDisplay = '';
-                        if (isCompleted && durationSec !== undefined) {
+                        let statusDisplay = '';
+
+                        if (isCompleted) {
                             const m = Math.floor(durationSec / 60);
                             const s = durationSec % 60;
-                            timeDisplay = `<span class="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-1 rounded">所要時間: ${m > 0 ? m + '分' : ''}${s}秒</span>`;
+                            statusDisplay = `<span class="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-1 rounded">所要時間: ${m > 0 ? m + '分' : ''}${s}秒</span>`;
+                        } else if (isSkipped) {
+                            statusDisplay = `<span class="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded">見送り（未完了）</span>`;
                         }
+
+                        let btnStyle = "bg-white border-slate-200 text-slate-800 hover:border-blue-400";
+                        if (isCompleted) btnStyle = "bg-emerald-50 border-emerald-500 text-emerald-800";
+                        if (isSkipped) btnStyle = "bg-amber-50 border-amber-400 text-amber-800";
 
                         return `
                             <button onclick="handleTaskClick('${regKey}', '${name}')" 
-                                class="w-full p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${isCompleted ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-800 hover:border-blue-400'}">
+                                class="w-full p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${btnStyle}">
                                 <span>${name}</span>
                                 <div class="flex items-center gap-2">
-                                    ${timeDisplay}
+                                    ${statusDisplay}
                                     ${isCompleted ? '<i data-lucide="check-circle" class="text-emerald-600"></i>' : ''}
+                                    ${isSkipped ? '<i data-lucide="alert-circle" class="text-amber-600"></i>' : ''}
                                 </div>
                             </button>
                         `;
                     }).join('')}
 
-                    ${currentTasks.length > 0 && currentTasks.every(name => state[regKey].includes(name)) ? 
+                    ${currentTasks.length > 0 && currentTasks.every(name => completedList.includes(name) || skippedList.includes(name)) ? 
                         `<button onclick="nextHour('${regKey}')" class="w-full p-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 animate-bounce">次の時間へ進む →</button>` 
                         : ''}
                 </div>
@@ -392,8 +416,10 @@
         }
 
         function handleTaskClick(regKey, taskName) {
-            if (state[regKey].includes(taskName)) return;
-
+            const completedList = regKey === 'r1' ? state.r1 : state.r2;
+            const skippedList = regKey === 'r1' ? state.r1Skips : state.r2Skips;
+            
+            // 既に完了またはスキップ済みの場合は再編集用にモーダルを開くか、そのままにする
             const trimmedName = taskName.trim();
             let subs = taskMasterMap[trimmedName];
             if (!subs || !Array.isArray(subs) || subs.length === 0) {
@@ -415,7 +441,7 @@
             `).join('');
             
             btn.disabled = true;
-            btn.className = "w-2/3 p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition";
+            btn.className = "p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition text-xs";
             document.getElementById('task-modal').classList.remove('hidden');
         }
 
@@ -425,27 +451,80 @@
             const btn = document.getElementById('complete-btn');
             if (allChecked) {
                 btn.disabled = false;
-                btn.className = "w-2/3 p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition";
+                btn.className = "p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition text-xs";
             } else {
                 btn.disabled = true;
-                btn.className = "w-2/3 p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition";
+                btn.className = "p-3 rounded-xl bg-slate-200 text-slate-500 font-bold cursor-not-allowed transition text-xs";
             }
         }
 
-        // モーダルを閉じる（キャンセル用）
         function closeModal() {
             document.getElementById('task-modal').classList.add('hidden');
+        }
+
+        // タスクスキップ（見送り）処理
+        async function skipTask() {
+            const regKey = state.activeReg;
+            const taskName = state.activeTask;
+            const completedList = regKey === 'r1' ? state.r1 : state.r2;
+            const skippedList = regKey === 'r1' ? state.r1Skips : state.r2Skips;
+
+            // 既に完了リストにあれば削除
+            const cIdx = completedList.indexOf(taskName);
+            if (cIdx > -1) completedList.splice(cIdx, 1);
+
+            if (!skippedList.includes(taskName)) {
+                skippedList.push(taskName);
+                saveLocalState();
+
+                // ログにもスキップとして送信
+                const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
+                const currentHour = regKey === 'r1' ? state.r1Hour : state.r2Hour;
+                const logData = {
+                    sheet: "logs",
+                    action: "append",
+                    row: {
+                        timestamp: new Date().toLocaleString(),
+                        store: currentStore.name,
+                        shift: currentShift.name,
+                        reg: regKey === 'r1' ? '1レジ' : '2レジ',
+                        staff: staffName,
+                        task: taskName + " (見送り・未完了)",
+                        hour: currentHour + "時台",
+                        duration_sec: 0
+                    }
+                };
+
+                try {
+                    fetch(GAS_API_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(logData)
+                    });
+                } catch (err) {
+                    console.error("スキップログ送信エラー:", err);
+                }
+            }
+
+            closeModal();
+            renderApp();
         }
 
         async function confirmTask() {
             const regKey = state.activeReg;
             const taskName = state.activeTask;
+            const completedList = regKey === 'r1' ? state.r1 : state.r2;
+            const skippedList = regKey === 'r1' ? state.r1Skips : state.r2Skips;
 
-            if (!state[regKey].includes(taskName)) {
+            // スキップリストにあれば削除
+            const sIdx = skippedList.indexOf(taskName);
+            if (sIdx > -1) skippedList.splice(sIdx, 1);
+
+            if (!completedList.includes(taskName)) {
                 const nowTime = Date.now();
                 const lastTime = regKey === 'r1' ? state.r1LastCompleteTime : state.r2LastCompleteTime;
                 const durationSec = Math.floor((nowTime - lastTime) / 1000);
-
                 const currentHour = (regKey === 'r1') ? state.r1Hour : state.r2Hour;
 
                 if (regKey === 'r1') {
@@ -456,7 +535,7 @@
                     state.r2LastCompleteTime = nowTime;
                 }
 
-                state[regKey].push(taskName);
+                completedList.push(taskName);
                 saveLocalState();
 
                 const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
@@ -518,13 +597,13 @@
             document.getElementById('report-r1-staff').innerText = state.r1Staff;
             document.getElementById('report-r2-staff').innerText = state.r2Staff;
 
-            renderReportTasks('r1', currentShift.tasks.r1, state.r1, state.r1Times, 'report-r1-tasks');
-            renderReportTasks('r2', currentShift.tasks.r2, state.r2, state.r2Times, 'report-r2-tasks');
+            renderReportTasks('r1', currentShift.tasks.r1, state.r1, state.r1Skips, state.r1Times, 'report-r1-tasks');
+            renderReportTasks('r2', currentShift.tasks.r2, state.r2, state.r2Skips, state.r2Times, 'report-r2-tasks');
 
             document.getElementById('print-modal').classList.remove('hidden');
         }
 
-        function renderReportTasks(regKey, regTasksByHour, completedList, timesMap, containerId) {
+        function renderReportTasks(regKey, regTasksByHour, completedList, skippedList, timesMap, containerId) {
             const container = document.getElementById(containerId);
             const allTasks = [...new Set(Object.values(regTasksByHour || {}).flat())];
 
@@ -535,36 +614,46 @@
 
             container.innerHTML = allTasks.map(name => {
                 const isDone = completedList.includes(name);
+                const isSkipped = skippedList.includes(name);
                 const actualSec = timesMap[name];
                 const standardSec = taskStandardTimes[name] || 0;
 
+                let statusStr = '未実施';
                 let feedbackHtml = '';
-                if (isDone && standardSec > 0 && actualSec !== undefined) {
-                    const diffSec = actualSec - standardSec;
-                    const diffMin = Math.abs(Math.floor(diffSec / 60));
-                    const diffS = Math.abs(diffSec % 60);
-                    const diffStr = diffMin > 0 ? `${diffMin}分${diffS}秒` : `${diffS}秒`;
 
-                    if (actualSec < standardSec * 0.3 && standardSec >= 60) {
-                        feedbackHtml = `<span class="text-red-600 font-bold bg-red-50 px-1 rounded">⚠️ 規定より著しく短いです。手順の抜け漏れを確認してください。</span>`;
-                    } else if (diffSec > 60) {
-                        feedbackHtml = `<span class="text-amber-600">標準より ${diffStr} 遅延</span>`;
-                    } else if (diffSec < -60) {
-                        feedbackHtml = `<span class="text-blue-600">標準より ${diffStr} スムーズ</span>`;
-                    } else {
-                        feedbackHtml = `<span class="text-emerald-600">標準的ペース</span>`;
+                if (isDone) {
+                    statusStr = `実測: ${Math.floor(actualSec/60)}分${actualSec%60}秒`;
+                    if (standardSec > 0 && actualSec !== undefined) {
+                        const diffSec = actualSec - standardSec;
+                        const diffMin = Math.abs(Math.floor(diffSec / 60));
+                        const diffS = Math.abs(diffSec % 60);
+                        const diffStr = diffMin > 0 ? `${diffMin}分${diffS}秒` : `${diffS}秒`;
+
+                        if (actualSec < standardSec * 0.3 && standardSec >= 60) {
+                            feedbackHtml = `<div class="text-red-600 font-bold bg-red-50 px-1 rounded text-[10px]">⚠️ 規定より著しく短いです。手順の抜け漏れを確認してください。</div>`;
+                        } else if (diffSec > 60) {
+                            feedbackHtml = `<div class="text-amber-600 text-[10px]">標準より ${diffStr} 遅延</div>`;
+                        } else if (diffSec < -60) {
+                            feedbackHtml = `<div class="text-blue-600 text-[10px]">標準より ${diffStr} スムーズ</div>`;
+                        } else {
+                            feedbackHtml = `<div class="text-emerald-600 text-[10px]">標準的ペース</div>`;
+                        }
                     }
+                } else if (isSkipped) {
+                    statusStr = `<span class="text-amber-600 font-bold">見送り（未完了）</span>`;
                 }
 
-                const timeStr = (isDone && actualSec !== undefined) ? `実測: ${Math.floor(actualSec/60)}分${actualSec%60}秒` : '未完了';
+                let iconSymbol = 'ー';
+                if (isDone) iconSymbol = '✓';
+                if (isSkipped) iconSymbol = '⚠️';
 
                 return `
                     <div class="flex flex-col border-b border-slate-100 py-1 text-[11px]">
                         <div class="flex justify-between items-center">
-                            <span class="font-bold ${isDone ? 'text-slate-800' : 'text-slate-400'}">${isDone ? '✓' : 'ー'} ${name}</span>
-                            <span class="font-mono text-slate-500">${timeStr}</span>
+                            <span class="font-bold ${isDone ? 'text-slate-800' : isSkipped ? 'text-amber-700' : 'text-slate-400'}">${iconSymbol} ${name}</span>
+                            <span class="font-mono text-slate-500">${statusStr}</span>
                         </div>
-                        ${feedbackHtml ? `<div class="mt-0.5 text-[10px] pl-4">${feedbackHtml}</div>` : ''}
+                        ${feedbackHtml}
                     </div>
                 `;
             }).join('');
