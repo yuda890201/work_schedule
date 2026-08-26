@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - 運用決定版</title>
+    <title>ワークスケジュール - 作業入力ポータル</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="icon" type="image/png" href="icon-192.png">
@@ -30,7 +30,7 @@
 </head>
 <body class="bg-slate-100 min-h-screen">
 
-    <!-- 🌐 豆知識＆アニメーション付きローディングオーバーレイ -->
+    <!-- 🌐 ローディングオーバーレイ -->
     <div id="loading-overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center space-y-6 p-6 transition-opacity duration-300">
         <div class="relative flex items-center justify-center">
             <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -39,7 +39,6 @@
         <div class="text-center space-y-2 max-w-md">
             <p class="text-white font-bold text-base tracking-wider">クラウドからデータを同期中...</p>
             <div id="loading-tip-box" class="bg-slate-800/90 border border-slate-700 p-4 rounded-xl shadow-lg text-emerald-300 text-xs font-bold leading-relaxed min-h-[60px] flex items-center justify-center">
-                <!-- ランダムメッセージがここに表示されます -->
             </div>
         </div>
     </div>
@@ -48,7 +47,7 @@
         <div class="max-w-6xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-4">
                 <button onclick="safeNavigate('dashboard.html')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-bold transition">← ダッシュボードへ</button>
-                <h1 class="font-bold flex items-center gap-2"><i data-lucide="pen-tool"></i> WS作業入力</h1>
+                <h1 class="font-bold flex items-center gap-2"><i data-lucide="pen-tool"></i> ワークスケジュール作業入力</h1>
             </div>
             <div class="flex items-center gap-4">
                 <span id="store-name-display" class="text-xs bg-blue-600 px-2.5 py-1 rounded-full font-bold"></span>
@@ -90,12 +89,12 @@
     <div id="print-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-lg text-slate-800">シフト作業実施報告書</h3>
+                <h3 class="font-bold text-lg text-slate-800">ワークスケジュール作業実施報告書</h3>
                 <button onclick="closePrintPreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-xs">
                 <div class="text-center border-b pb-3 space-y-1">
-                    <h2 class="text-base font-bold">シフト作業実施報告書 兼 フィードバック</h2>
+                    <h2 class="text-base font-bold">ワークスケジュール作業実施報告書 兼 フィードバック</h2>
                     <p id="report-store-date" class="text-[10px] text-slate-500"></p>
                 </div>
                 <div class="grid grid-cols-2 gap-4 bg-slate-50 p-2.5 rounded-lg border">
@@ -116,7 +115,7 @@
                 </div>
                 <div class="pt-6 border-t flex justify-between text-[10px] text-slate-400">
                     <p>管理者確認印: ___________________</p>
-                    <p>WS作業入力ポータルシステム</p>
+                    <p>ワークスケジュール管理システム</p>
                 </div>
             </div>
             <div class="flex justify-end gap-2 pt-2 border-t">
@@ -131,18 +130,16 @@
     <script>
         lucide.createIcons();
 
-        // 🌟 ランダムで表示する豆知識・応援メッセージ配列
         const loadingTips = [
             "💡 豆知識: 接客の基本は『明るい声』と『笑顔』から！",
             "☕ 接客英語: 『温めますか？』⇒ 'Would you like that warmed?'",
-            "✨ スタッフの皆さん、今日もシフトお疲れ様です！",
+            "✨ スタッフの皆さん、今日もワークスケジュールお疲れ様です！",
             "🏃‍♂️ データをクラウドへ猛ダッシュ中...",
             "🧹 ワンポイント: 商品の前面陳列（前出し）で売上アップ！",
             "🌍 多言語Tips: 『お会計〇〇円です』⇒ 'That will be 〇〇 yen.'",
             "🔥 フライヤー温度やホットフードの管理、お疲れ様です！"
         ];
 
-        // 読み込み開始時にランダムで1つセットしてオーバーレイを表示
         function showLoading() {
             const randomTip = loadingTips[Math.floor(Math.random() * loadingTips.length)];
             document.getElementById('loading-tip-box').innerText = randomTip;
@@ -151,17 +148,15 @@
             overlay.classList.remove('opacity-0', 'pointer-events-none');
         }
 
-        // 読み込み完了時にフェードアウト
         function hideLoading() {
             const overlay = document.getElementById('loading-overlay');
             overlay.classList.add('opacity-0', 'pointer-events-none');
-            setTimeout(() => {
-                overlay.style.display = 'none';
-            }, 300);
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
         }
 
-        showLoading(); // 初期表示時
+        showLoading();
 
+        // ★ここにGASのウェブアプリURLを設定してください
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
 
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
@@ -188,7 +183,8 @@
             r2StartTime: Date.now(),
             r1Staff: "未選択",
             r2Staff: "未選択",
-            currentHour: 8 
+            r1Hour: 8, // 1レジ独自の時間フェーズ
+            r2Hour: 8  // 2レジ独自の時間フェーズ
         }; 
 
         function saveLocalState() {
@@ -240,8 +236,12 @@
                 currentShiftKey = Object.keys(SHIFT_DATA)[0];
                 currentShift = SHIFT_DATA[currentShiftKey];
                 
-                if (!state.currentHour || state.currentHour < currentShift.start || state.currentHour >= currentShift.end) {
-                    state.currentHour = currentShift.start;
+                // 1レジ・2レジそれぞれのフェーズ時間を初期化（シフトの開始時間より前なら開始時間に合わせる）
+                if (state.r1Hour === undefined || state.r1Hour < currentShift.start || state.r1Hour >= currentShift.end) {
+                    state.r1Hour = currentShift.start;
+                }
+                if (state.r2Hour === undefined || state.r2Hour < currentShift.start || state.r2Hour >= currentShift.end) {
+                    state.r2Hour = currentShift.start;
                 }
 
             } catch (error) {
@@ -282,7 +282,8 @@
         function resetShift() {
             currentShiftKey = document.getElementById('shift-select').value;
             currentShift = SHIFT_DATA[currentShiftKey];
-            state.currentHour = currentShift.start;
+            state.r1Hour = currentShift.start;
+            state.r2Hour = currentShift.start;
             state.r1 = [];
             state.r2 = [];
             state.r1Times = {};
@@ -302,17 +303,17 @@
         }
 
         function renderApp() {
-            renderSection('r1', '1レジ担当者', state.r1Staff);
-            renderSection('r2', '2レジ担当者', state.r2Staff);
+            renderSection('r1', '1レジ担当者', state.r1Staff, state.r1Hour);
+            renderSection('r2', '2レジ担当者', state.r2Staff, state.r2Hour);
             saveLocalState();
         }
 
-        function renderSection(regKey, title, currentStaff) {
+        function renderSection(regKey, title, currentStaff, currentHour) {
             const container = document.getElementById(`${regKey}-area`);
             const regTasksByHour = currentShift.tasks[regKey] || {};
             
             const allTaskNames = [...new Set(Object.values(regTasksByHour).flat())];
-            const currentTasks = regTasksByHour[state.currentHour] || [];
+            const currentTasks = regTasksByHour[currentHour] || [];
             const timesMap = regKey === 'r1' ? state.r1Times : state.r2Times;
             const startTime = regKey === 'r1' ? state.r1StartTime : state.r2StartTime;
             const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -344,7 +345,7 @@
                     <div class="p-4 bg-slate-900 rounded-xl text-white flex justify-between items-center">
                         <div>
                             <p class="text-xs text-slate-400">現在のフェーズ</p>
-                            <p class="text-2xl font-bold font-mono">${state.currentHour}:00〜</p>
+                            <p class="text-2xl font-bold font-mono">${currentHour}:00〜</p>
                         </div>
                         <div class="text-right">
                             <p class="text-xs text-slate-400">経過時間</p>
@@ -434,6 +435,8 @@
                 const lastTime = regKey === 'r1' ? state.r1LastCompleteTime : state.r2LastCompleteTime;
                 const durationSec = Math.floor((nowTime - lastTime) / 1000);
 
+                const currentHour = (regKey === 'r1') ? state.r1Hour : state.r2Hour;
+
                 if (regKey === 'r1') {
                     state.r1Times[taskName] = durationSec;
                     state.r1LastCompleteTime = nowTime;
@@ -456,7 +459,7 @@
                         reg: regKey === 'r1' ? '1レジ' : '2レジ',
                         staff: staffName,
                         task: taskName,
-                        hour: state.currentHour + "時台",
+                        hour: currentHour + "時台",
                         duration_sec: durationSec
                     }
                 };
@@ -477,22 +480,24 @@
             renderApp();
         }
 
+        // 1レジ・2レジそれぞれ個別に次の時間へ進む
         function nextHour(regKey) {
-            if (state.currentHour < currentShift.end - 1) {
-                state.currentHour += 1;
-                const nowTime = Date.now();
+            const targetHour = (regKey === 'r1') ? state.r1Hour : state.r2Hour;
+
+            if (targetHour < currentShift.end - 1) {
                 if (regKey === 'r1') {
-                    state.r1StartTime = nowTime;
-                    state.r1LastCompleteTime = nowTime;
-                }
-                if (regKey === 'r2') {
-                    state.r2StartTime = nowTime;
-                    state.r2LastCompleteTime = nowTime;
+                    state.r1Hour += 1;
+                    state.r1StartTime = Date.now();
+                    state.r1LastCompleteTime = Date.now();
+                } else {
+                    state.r2Hour += 1;
+                    state.r2StartTime = Date.now();
+                    state.r2LastCompleteTime = Date.now();
                 }
                 saveLocalState();
                 renderApp();
             } else {
-                alert("このシフトの最終時間です！お疲れ様でした。");
+                alert(`${regKey === 'r1' ? '1レジ' : '2レジ'}はこのシフトの最終時間です！お疲れ様でした。`);
             }
         }
 
