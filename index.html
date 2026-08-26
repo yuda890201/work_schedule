@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ワークスケジュール - タッチ最適化ポータル</title>
+    <title>ワークスケジュール - 視覚最適化ポータル</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="icon" type="image/png" href="icon-192.png">
@@ -11,7 +11,6 @@
     <link rel="manifest" href="manifest.json">
     <style>
         body { font-family: 'Inter', sans-serif; touch-action: manipulation; }
-        /* タブレット操作性を高めるカスタムスタイル */
         .touch-target { min-height: 64px; }
         .subtask-card { min-height: 56px; }
         @media print {
@@ -73,14 +72,14 @@
             </div>
         </div>
 
-        <!-- 左右のレジエリア（十分な余白とタッチサイズ） -->
+        <!-- 左右のレジエリア -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="main-area">
             <div id="r1-area" class="flex gap-4 min-h-[450px]"></div>
             <div id="r2-area" class="flex gap-4 min-h-[450px]"></div>
         </div>
     </main>
 
-    <!-- サブタスク用モーダル（ビッグカードタッチ対応） -->
+    <!-- サブタスク用モーダル -->
     <div id="task-modal" class="fixed inset-0 bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-lg rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div class="flex justify-between items-center border-b pb-4">
@@ -88,7 +87,6 @@
                 <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             
-            <!-- サブタスクリスト（行全体がタップ可能） -->
             <div id="subtask-list" class="space-y-3"></div>
             
             <div class="grid grid-cols-3 gap-3 pt-2">
@@ -394,16 +392,17 @@
                             const s = durationSec % 60;
                             statusDisplay = `<span class="text-xs font-mono bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg">所要時間: ${m > 0 ? m + '分' : ''}${s}秒</span>`;
                         } else if (isSkipped) {
-                            statusDisplay = `<span class="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-lg">見送り</span>`;
+                            statusDisplay = `<span class="text-xs font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-lg">見送り</span>`;
                         }
 
-                        let btnStyle = "bg-white border-slate-200 text-slate-800 hover:border-blue-400 shadow-xs";
-                        if (isCompleted) btnStyle = "bg-emerald-50/80 border-emerald-500 text-emerald-900 shadow-xs";
-                        if (isSkipped) btnStyle = "bg-amber-50/80 border-amber-400 text-amber-900 shadow-xs";
+                        // 🌟 視覚的コントラストを強化したボタンスタイル
+                        let btnStyle = "bg-white border-2 border-slate-300 text-slate-900 shadow-sm hover:border-blue-500";
+                        if (isCompleted) btnStyle = "bg-emerald-50/90 border-2 border-emerald-500 text-emerald-900 opacity-80 shadow-xs";
+                        if (isSkipped) btnStyle = "bg-amber-50/90 border-2 border-amber-400 text-amber-900 shadow-xs";
 
                         return `
                             <button onclick="handleTaskClick('${regKey}', '${name}')" 
-                                class="touch-target w-full p-4 md:p-5 rounded-2xl border-2 font-bold transition-all active:scale-[0.98] flex items-center justify-between ${btnStyle}">
+                                class="touch-target w-full p-4 md:p-5 rounded-2xl font-bold transition-all active:scale-[0.98] flex items-center justify-between ${btnStyle}">
                                 <span class="text-base md:text-lg">${name}</span>
                                 <div class="flex items-center gap-2.5">
                                     ${statusDisplay}
@@ -437,7 +436,6 @@
             
             document.getElementById('modal-title').innerText = taskName;
             
-            // ビッグカード（行全体タップ）に対応したリスト生成
             list.innerHTML = subs.map((s, idx) => `
                 <label class="subtask-card flex items-center gap-4 p-4 bg-slate-50 hover:bg-blue-50/50 rounded-2xl cursor-pointer border border-slate-200 transition active:scale-[0.99]">
                     <input type="checkbox" id="sub-chk-${idx}" onchange="checkSubtasks()" class="w-6 h-6 text-blue-600 rounded-md focus:ring-blue-500 cursor-pointer">
