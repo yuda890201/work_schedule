@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ワークスケジュール - 視覚最適化ポータル</title>
+    <title>ワークスケジュール - プログレスバー対応ポータル</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="icon" type="image/png" href="icon-192.png">
@@ -335,6 +335,11 @@
             const completedList = regKey === 'r1' ? state.r1 : state.r2;
             const skippedList = regKey === 'r1' ? state.r1Skips : state.r2Skips;
 
+            // 🌟 進行状況（プログレスバー）の計算
+            const totalTasksCount = currentTasks.length;
+            const finishedTasksCount = currentTasks.filter(name => completedList.includes(name) || skippedList.includes(name)).length;
+            const progressPercent = totalTasksCount > 0 ? Math.round((finishedTasksCount / totalTasksCount) * 100) : 0;
+
             const startTime = regKey === 'r1' ? state.r1StartTime : state.r2StartTime;
             const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
             const initialElapsedStr = new Date(initialElapsed * 1000).toISOString().substr(11, 8);
@@ -368,14 +373,27 @@
                         </select>
                     </div>
 
-                    <div class="p-4 md:p-5 bg-slate-900 rounded-2xl text-white flex justify-between items-center shadow-md">
-                        <div>
-                            <p class="text-xs text-slate-400">現在のフェーズ</p>
-                            <p class="text-2xl md:text-3xl font-bold font-mono">${currentHour}:00〜</p>
+                    <div class="p-4 md:p-5 bg-slate-900 rounded-2xl text-white space-y-3 shadow-md">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-xs text-slate-400">現在のフェーズ</p>
+                                <p class="text-2xl md:text-3xl font-bold font-mono">${currentHour}:00〜</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-slate-400">経過時間</p>
+                                <p id="${regKey}-timer" class="text-xl md:text-2xl font-bold font-mono text-emerald-400">${initialElapsedStr}</p>
+                            </div>
                         </div>
-                        <div class="text-right">
-                            <p class="text-xs text-slate-400">経過時間</p>
-                            <p id="${regKey}-timer" class="text-xl md:text-2xl font-bold font-mono text-emerald-400">${initialElapsedStr}</p>
+
+                        <!-- 🌟 進行状況プログレスバー -->
+                        <div class="space-y-1 pt-1 border-t border-slate-800">
+                            <div class="flex justify-between text-xs font-bold">
+                                <span class="text-slate-400">時間内タスク進捗</span>
+                                <span class="text-emerald-400 font-mono">${progressPercent}% (${finishedTasksCount}/${totalTasksCount})</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                                <div class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500" style="width: ${progressPercent}%"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -395,7 +413,6 @@
                             statusDisplay = `<span class="text-xs font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-lg">見送り</span>`;
                         }
 
-                        // 🌟 視覚的コントラストを強化したボタンスタイル
                         let btnStyle = "bg-white border-2 border-slate-300 text-slate-900 shadow-sm hover:border-blue-500";
                         if (isCompleted) btnStyle = "bg-emerald-50/90 border-2 border-emerald-500 text-emerald-900 opacity-80 shadow-xs";
                         if (isSkipped) btnStyle = "bg-amber-50/90 border-2 border-amber-400 text-amber-900 shadow-xs";
