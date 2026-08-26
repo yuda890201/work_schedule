@@ -3,17 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - 報告フィードバック版</title>
+    <title>WS作業入力ポータル - 複数店舗運用版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- ファビコン (ブラウザータブ用) -->
-    <link rel="icon" type="image/png" href="work_schedule.png">
-
-    <!-- iOS (iPhone/iPad) ホーム画面用アイコン -->
-    <link rel="apple-touch-icon" href="work_schedule.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-
-    <!-- Android / PWA用マニフェストファイル参照 -->
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -39,7 +33,7 @@
     <header class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md no-print">
         <div class="max-w-6xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-4">
-                <button onclick="window.location.href='dashboard.html'" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-bold transition">← ダッシュボードへ</button>
+                <button onclick="safeNavigate('dashboard.html')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-bold transition">← ダッシュボードへ</button>
                 <h1 class="font-bold flex items-center gap-2"><i data-lucide="pen-tool"></i> WS作業入力</h1>
             </div>
             <div class="flex items-center gap-4">
@@ -51,13 +45,13 @@
 
     <!-- ローディング表示 -->
     <div id="loading" class="max-w-6xl mx-auto p-12 text-center font-bold text-slate-500">
-        クラウドから作業ポータルデータを読み込み中...
+        クラウドから店舗別データを読み込み中...
     </div>
 
     <main class="max-w-6xl mx-auto p-4 space-y-6 hidden" id="main-content">
         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4 no-print">
             <div class="flex-1 min-w-[250px]">
-                <label class="block text-xs font-bold text-slate-500 mb-1">現在のシフト</label>
+                <label class="block text-xs font-bold text-slate-500 mb-1">現在のシフト (<span id="store-label" class="text-blue-600"></span>)</label>
                 <select id="shift-select" onchange="resetShift()" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg font-bold text-base">
                 </select>
             </div>
@@ -87,17 +81,16 @@
     <div id="print-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-lg text-slate-800">シフト作業報告シート（フィードバック付き）</h3>
+                <h3 class="font-bold text-lg text-slate-800">シフト作業実施報告書（店舗独立版）</h3>
                 <button onclick="closePrintPreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
-            <!-- 印刷対象エリア -->
             <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-xs">
                 <div class="text-center border-b pb-3 space-y-1">
                     <h2 class="text-base font-bold">シフト作業実施報告書 兼 フィードバック</h2>
                     <p id="report-store-date" class="text-[10px] text-slate-500"></p>
                 </div>
                 <div class="grid grid-cols-2 gap-4 bg-slate-50 p-2.5 rounded-lg border">
-                    <div><span class="font-bold text-slate-500">対象シフト:</span> <span id="report-shift-name" class="font-bold"></span></div>
+                    <div><span class="font-bold text-slate-500">対象店舗・シフト:</span> <span id="report-shift-name" class="font-bold"></span></div>
                     <div><span class="font-bold text-slate-500">出力日時:</span> <span id="report-output-time"></span></div>
                     <div><span class="font-bold text-slate-500">1レジ担当:</span> <span id="report-r1-staff" class="font-bold text-blue-600"></span></div>
                     <div><span class="font-bold text-slate-500">2レジ担当:</span> <span id="report-r2-staff" class="font-bold text-emerald-600"></span></div>
@@ -129,21 +122,26 @@
     <script>
         lucide.createIcons();
         
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
+        const GAS_API_URL = "YOUR_GAS_WEB_APP_URL";
 
+        // 店舗IDの安全な取得（未設定ならstore_1）
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
+        
         document.getElementById('store-name-display').innerText = currentStore.name;
+        document.getElementById('store-label').innerText = currentStore.name;
 
         let staffList = [];
-        let taskMasterMap = {};       // タスク名 -> サブタスク配列
-        let taskStandardTimes = {};   // タスク名 -> 標準時間（秒）
+        let taskMasterMap = {};
+        let taskStandardTimes = {};
         let SHIFT_DATA = {};
         let currentShiftKey = "";
         let currentShift = null;
 
-        let state = { 
+        // 店舗IDごとに独立したキーで進捗状態を管理（2店舗同時運用しても混ざらない）
+        const stateKey = `ws_portal_state_${currentStoreId}`;
+        let state = JSON.parse(localStorage.getItem(stateKey)) || { 
             r1: [], r2: [], 
             r1Times: {}, r2Times: {}, 
             r1LastCompleteTime: Date.now(), 
@@ -155,11 +153,18 @@
             currentHour: 8 
         }; 
 
+        // 状態を店舗別ローカルストレージへ自動保存
+        function saveLocalState() {
+            localStorage.setItem(stateKey, JSON.stringify(state));
+        }
+
         async function initPortal() {
             try {
+                // 店舗名に合致するスタッフのみを抽出（または全スタッフから選択可能）
                 const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
                 const staffData = await staffRes.json();
-                staffList = Array.isArray(staffData) ? staffData : [];
+                staffList = Array.isArray(staffData) ? staffData.filter(s => !s.store || s.store === currentStore.name || s.store === "共通") : [];
+                if (staffList.length === 0 && Array.isArray(staffData)) staffList = staffData; // フォールバック
 
                 const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
                 const taskData = await taskRes.json();
@@ -168,13 +173,12 @@
                         if (t && t.name) {
                             const tName = t.name.trim();
                             taskMasterMap[tName] = typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || []); 
-                            // 標準時間が設定されている場合は保持（デフォルト300秒=5分などを例として未設定時は持たないか、プロパティ標準を見る）
-                            // ここではスプレッドシートに 'standard_sec' 列があればそれを読み込む、なければデフォルト
                             taskStandardTimes[tName] = Number(t.standard_sec) || 0; 
                         }
                     });
                 }
 
+                // 店舗専用のシフトシートから取得（shifts_store_1, shifts_store_2 など完全に分離）
                 const sheetName = `shifts_${currentStoreId}`;
                 const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
                 const shiftDataJson = await shiftRes.json();
@@ -186,7 +190,7 @@
                 if (!SHIFT_DATA || Object.keys(SHIFT_DATA).length === 0) {
                     SHIFT_DATA = {
                         "s_morning": { 
-                            name: "朝シフト (8:00〜12:00)", 
+                            name: `${currentStore.name} 朝シフト (8:00〜12:00)`, 
                             start: 8, 
                             end: 12, 
                             tasks: { 
@@ -199,17 +203,15 @@
 
                 currentShiftKey = Object.keys(SHIFT_DATA)[0];
                 currentShift = SHIFT_DATA[currentShiftKey];
-                state.currentHour = currentShift.start;
                 
-                if (staffList.length > 0) {
-                    state.r1Staff = staffList[0].name;
-                    if (staffList.length > 1) state.r2Staff = staffList[1].name;
+                if (!state.currentHour || state.currentHour < currentShift.start || state.currentHour >= currentShift.end) {
+                    state.currentHour = currentShift.start;
                 }
 
             } catch (error) {
                 console.error("ポータル初期化エラー:", error);
                 SHIFT_DATA = {
-                    "s1": { name: "朝シフト (8:00〜12:00)", start: 8, end: 12, tasks: { r1: { 8: ["ポットのお湯確認補充"] }, r2: { 8: ["温度チェック★"] } } }
+                    "s1": { name: `${currentStore.name} 標準シフト (8:00〜12:00)`, start: 8, end: 12, tasks: { r1: { 8: ["ポットのお湯確認補充"] }, r2: { 8: ["温度チェック★"] } } }
                 };
                 currentShiftKey = Object.keys(SHIFT_DATA)[0];
                 currentShift = SHIFT_DATA[currentShiftKey];
@@ -253,17 +255,20 @@
             state.r2StartTime = Date.now();
             state.r1LastCompleteTime = Date.now();
             state.r2LastCompleteTime = Date.now();
+            saveLocalState();
             renderApp();
         }
 
         function updateStaff(regKey, staffName) {
             if (regKey === 'r1') state.r1Staff = staffName;
             if (regKey === 'r2') state.r2Staff = staffName;
+            saveLocalState();
         }
 
         function renderApp() {
             renderSection('r1', '1レジ担当者', state.r1Staff);
             renderSection('r2', '2レジ担当者', state.r2Staff);
+            saveLocalState();
         }
 
         function renderSection(regKey, title, currentStaff) {
@@ -278,7 +283,7 @@
             const initialElapsedStr = new Date(initialElapsed * 1000).toISOString().substr(11, 8);
 
             const staffOptions = staffList.map(s => `
-                <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} / ${s.store || '店舗未設定'}</option>
+                <option value="${s.name}" ${s.name === currentStaff ? 'selected' : ''}>${s.name} (${s.store || '店舗未設定'})</option>
             `).join('');
 
             container.innerHTML = `
@@ -343,23 +348,15 @@
             lucide.createIcons();
         }
 
-        let tempTaskClickInfo = null;
-
         function handleTaskClick(regKey, taskName) {
             if (state[regKey].includes(taskName)) return;
 
             const trimmedName = taskName.trim();
             let subs = taskMasterMap[trimmedName];
-            
             if (!subs || !Array.isArray(subs) || subs.length === 0) {
                 subs = ["実施確認", "完了確認"];
             }
             
-            tempTaskClickInfo = { regKey, taskName, clickTime: Date.now() };
-            openModal(regKey, taskName, subs);
-        }
-
-        function openModal(regKey, taskName, subs) {
             state.activeTask = taskName;
             state.activeReg = regKey;
             
@@ -410,6 +407,7 @@
                 }
 
                 state[regKey].push(taskName);
+                saveLocalState();
 
                 const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
                 const logData = {
@@ -455,13 +453,13 @@
                     state.r2StartTime = nowTime;
                     state.r2LastCompleteTime = nowTime;
                 }
+                saveLocalState();
                 renderApp();
             } else {
                 alert("このシフトの最終時間です！お疲れ様でした。");
             }
         }
 
-        // 印刷プレビューおよびフィードバック生成
         function openPrintPreview() {
             document.getElementById('report-store-date').innerText = `店舗: ${currentStore.name} ／ 実施日: ${new Date().toLocaleDateString()}`;
             document.getElementById('report-shift-name').innerText = currentShift.name;
@@ -487,20 +485,17 @@
             container.innerHTML = allTasks.map(name => {
                 const isDone = completedList.includes(name);
                 const actualSec = timesMap[name];
-                const standardSec = taskStandardTimes[name] || 0; // 標準時間（未設定なら0）
+                const standardSec = taskStandardTimes[name] || 0;
 
                 let feedbackHtml = '';
-
-                // 作業時間が設定されていない（standardSec === 0）、または未完了の場合は何も表示しない
                 if (isDone && standardSec > 0 && actualSec !== undefined) {
-                    const diffSec = actualSec - standardSec; // プラスなら遅い、マイナスなら早い
+                    const diffSec = actualSec - standardSec;
                     const diffMin = Math.abs(Math.floor(diffSec / 60));
                     const diffS = Math.abs(diffSec % 60);
                     const diffStr = diffMin > 0 ? `${diffMin}分${diffS}秒` : `${diffS}秒`;
 
-                    // 著しく短い（標準時間の30%未満、かつ30秒以上早いなど）場合の警告文
                     if (actualSec < standardSec * 0.3 && standardSec >= 60) {
-                        feedbackHtml = `<span class="text-red-600 font-bold bg-red-50 px-1 rounded">⚠️ 規定より著しく短いです。手順の抜け漏れがないか確認してください。</span>`;
+                        feedbackHtml = `<span class="text-red-600 font-bold bg-red-50 px-1 rounded">⚠️ 規定より著しく短いです。手順の抜け漏れを確認してください。</span>`;
                     } else if (diffSec > 60) {
                         feedbackHtml = `<span class="text-amber-600">標準より ${diffStr} 遅延</span>`;
                     } else if (diffSec < -60) {
@@ -527,6 +522,16 @@
         function closePrintPreview() {
             document.getElementById('print-modal').classList.add('hidden');
         }
+
+        // 画面遷移時の安全な自動保存
+        function safeNavigate(url) {
+            saveLocalState();
+            window.location.href = url;
+        }
+
+        window.addEventListener('beforeunload', () => {
+            saveLocalState();
+        });
 
         initPortal();
     </script>
