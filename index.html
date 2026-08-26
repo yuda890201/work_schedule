@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WS作業入力ポータル - 複数店舗運用版</title>
+    <title>WS作業入力ポータル - 運用決定版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="icon" type="image/png" href="icon-192.png">
@@ -30,6 +30,20 @@
 </head>
 <body class="bg-slate-100 min-h-screen">
 
+    <!-- 🌐 豆知識＆アニメーション付きローディングオーバーレイ -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center space-y-6 p-6 transition-opacity duration-300">
+        <div class="relative flex items-center justify-center">
+            <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <span class="absolute text-xl">🏪</span>
+        </div>
+        <div class="text-center space-y-2 max-w-md">
+            <p class="text-white font-bold text-base tracking-wider">クラウドからデータを同期中...</p>
+            <div id="loading-tip-box" class="bg-slate-800/90 border border-slate-700 p-4 rounded-xl shadow-lg text-emerald-300 text-xs font-bold leading-relaxed min-h-[60px] flex items-center justify-center">
+                <!-- ランダムメッセージがここに表示されます -->
+            </div>
+        </div>
+    </div>
+
     <header class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md no-print">
         <div class="max-w-6xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-4">
@@ -42,11 +56,6 @@
             </div>
         </div>
     </header>
-
-    <!-- ローディング表示 -->
-    <div id="loading" class="max-w-6xl mx-auto p-12 text-center font-bold text-slate-500">
-        クラウドから店舗別データを読み込み中...
-    </div>
 
     <main class="max-w-6xl mx-auto p-4 space-y-6 hidden" id="main-content">
         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4 no-print">
@@ -81,7 +90,7 @@
     <div id="print-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 no-print">
         <div class="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-lg text-slate-800">シフト作業実施報告書（店舗独立版）</h3>
+                <h3 class="font-bold text-lg text-slate-800">シフト作業実施報告書</h3>
                 <button onclick="closePrintPreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             <div id="print-report-area" class="bg-white p-6 rounded-xl border space-y-4 overflow-y-auto flex-1 text-slate-800 text-xs">
@@ -121,10 +130,40 @@
 
     <script>
         lucide.createIcons();
-        
+
+        // 🌟 ランダムで表示する豆知識・応援メッセージ配列
+        const loadingTips = [
+            "💡 豆知識: 接客の基本は『明るい声』と『笑顔』から！",
+            "☕ 接客英語: 『温めますか？』⇒ 'Would you like that warmed?'",
+            "✨ スタッフの皆さん、今日もシフトお疲れ様です！",
+            "🏃‍♂️ データをクラウドへ猛ダッシュ中...",
+            "🧹 ワンポイント: 商品の前面陳列（前出し）で売上アップ！",
+            "🌍 多言語Tips: 『お会計〇〇円です』⇒ 'That will be 〇〇 yen.'",
+            "🔥 フライヤー温度やホットフードの管理、お疲れ様です！"
+        ];
+
+        // 読み込み開始時にランダムで1つセットしてオーバーレイを表示
+        function showLoading() {
+            const randomTip = loadingTips[Math.floor(Math.random() * loadingTips.length)];
+            document.getElementById('loading-tip-box').innerText = randomTip;
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.display = 'flex';
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        // 読み込み完了時にフェードアウト
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 300);
+        }
+
+        showLoading(); // 初期表示時
+
         const GAS_API_URL = "YOUR_GAS_WEB_APP_URL";
 
-        // 店舗IDの安全な取得（未設定ならstore_1）
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
@@ -139,7 +178,6 @@
         let currentShiftKey = "";
         let currentShift = null;
 
-        // 店舗IDごとに独立したキーで進捗状態を管理（2店舗同時運用しても混ざらない）
         const stateKey = `ws_portal_state_${currentStoreId}`;
         let state = JSON.parse(localStorage.getItem(stateKey)) || { 
             r1: [], r2: [], 
@@ -153,18 +191,17 @@
             currentHour: 8 
         }; 
 
-        // 状態を店舗別ローカルストレージへ自動保存
         function saveLocalState() {
             localStorage.setItem(stateKey, JSON.stringify(state));
         }
 
         async function initPortal() {
+            showLoading();
             try {
-                // 店舗名に合致するスタッフのみを抽出（または全スタッフから選択可能）
                 const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
                 const staffData = await staffRes.json();
                 staffList = Array.isArray(staffData) ? staffData.filter(s => !s.store || s.store === currentStore.name || s.store === "共通") : [];
-                if (staffList.length === 0 && Array.isArray(staffData)) staffList = staffData; // フォールバック
+                if (staffList.length === 0 && Array.isArray(staffData)) staffList = staffData;
 
                 const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
                 const taskData = await taskRes.json();
@@ -178,7 +215,6 @@
                     });
                 }
 
-                // 店舗専用のシフトシートから取得（shifts_store_1, shifts_store_2 など完全に分離）
                 const sheetName = `shifts_${currentStoreId}`;
                 const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
                 const shiftDataJson = await shiftRes.json();
@@ -222,7 +258,7 @@
                 <option value="${k}">${SHIFT_DATA[k].name}</option>
             `).join('');
 
-            document.getElementById('loading').classList.add('hidden');
+            hideLoading();
             document.getElementById('main-content').classList.remove('hidden');
             renderApp();
         }
@@ -523,7 +559,6 @@
             document.getElementById('print-modal').classList.add('hidden');
         }
 
-        // 画面遷移時の安全な自動保存
         function safeNavigate(url) {
             saveLocalState();
             window.location.href = url;
