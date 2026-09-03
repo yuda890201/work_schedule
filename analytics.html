@@ -6,6 +6,10 @@
     <title>作業分析・集計</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <!-- ファビコン (ブラウザータブ用) -->
     <link rel="icon" type="image/png" href="work_schedule.png">
 
@@ -93,16 +97,14 @@
     <script>
         lucide.createIcons();
 
-        // ★ここにGASのウェブアプリURLを設定してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
-
         async function fetchAnalyticsData() {
             try {
-                // スプレッドシートの logs シートからデータを取得
-                const res = await fetch(`${GAS_API_URL}?sheet=logs`);
-                const logs = await res.json();
+                await wsAuthReady;
+                // Firestoreの logs コレクションからデータを取得
+                const snap = await db.collection('logs').orderBy('createdAt', 'asc').get();
+                const logs = snap.docs.map(d => d.data());
 
-                if (!Array.isArray(logs) || logs.length === 0) {
+                if (logs.length === 0) {
                     document.getElementById('loading').innerText = "まだ作業ログが記録されていません。作業入力ポータルからタスクを完了させてください。";
                     return;
                 }

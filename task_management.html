@@ -5,6 +5,10 @@
     <title>タスク管理マスター</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <!-- ファビコン (ブラウザータブ用) -->
     <link rel="icon" type="image/png" href="work_schedule.png">
 
@@ -59,64 +63,68 @@
     <script>
         lucide.createIcons();
 
-        // ★ここにGASのウェブアプリURLを設定してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
-
         let currentFilter = 'すべて';
         let currentSort = 'date_desc';
         let tasks = [];
+        let assignmentMap = {};
 
         // 全店舗のシフトデータから「どのタスクがどのシフトに割り当てられているか」を集計
-        function getTaskAssignmentMap() {
-            const assignmentMap = {}; 
-            const stores = JSON.parse(localStorage.getItem('ws_stores_master')) || [];
-            stores.forEach(store => {
-                const shiftData = JSON.parse(localStorage.getItem(`ws_shifts_data_${store.id}`)) || {};
-                Object.values(shiftData).forEach(shift => {
-                    if (shift && shift.tasks) {
-                        const checkAndAdd = (taskList) => {
-                            if (Array.isArray(taskList)) {
-                                taskList.forEach(tName => {
-                                    if (!assignmentMap[tName]) assignmentMap[tName] = [];
-                                    const label = `${store.name}: ${shift.name.split(' ')[0]}`;
-                                    if (!assignmentMap[tName].includes(label)) {
-                                        assignmentMap[tName].push(label);
-                                    }
-                                });
-                            }
-                        };
-                        if (shift.tasks.r1) Object.values(shift.tasks.r1).forEach(checkAndAdd);
-                        if (shift.tasks.r2) Object.values(shift.tasks.r2).forEach(checkAndAdd);
-                        Object.values(shift.tasks).forEach(val => {
-                            if (Array.isArray(val)) checkAndAdd(val);
-                        });
-                    }
-                });
-            });
-            return assignmentMap;
+        async function computeTaskAssignmentMap() {
+            const map = {};
+            try {
+                const storesSnap = await db.collection('stores').get();
+                const stores = storesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                for (const store of stores) {
+                    const shiftDoc = await db.collection('shifts').doc(store.id).get();
+                    const shiftData = shiftDoc.exists ? shiftDoc.data() : {};
+                    Object.values(shiftData).forEach(shift => {
+                        if (shift && shift.tasks) {
+                            const checkAndAdd = (taskList) => {
+                                if (Array.isArray(taskList)) {
+                                    taskList.forEach(tName => {
+                                        if (!map[tName]) map[tName] = [];
+                                        const label = `${store.name}: ${(shift.name || '').split(' ')[0]}`;
+                                        if (!map[tName].includes(label)) {
+                                            map[tName].push(label);
+                                        }
+                                    });
+                                }
+                            };
+                            if (shift.tasks.r1) Object.values(shift.tasks.r1).forEach(checkAndAdd);
+                            if (shift.tasks.r2) Object.values(shift.tasks.r2).forEach(checkAndAdd);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("シフト割当データ取得エラー:", error);
+            }
+            return map;
         }
 
-        // クラウドからタスクデータを取得
+        // Firestoreからタスクデータを取得
         async function fetchTasksData() {
             try {
-                const response = await fetch(`${GAS_API_URL}?sheet=tasks`);
-                const data = await response.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    // スプレッドシートから取得したデータは subs が文字列化されている場合があるため配列に戻す処理
-                    tasks = data.map(t => ({
-                        id: Number(t.id) || Date.now(),
-                        name: t.name || "",
-                        tag: t.tag || "その他",
-                        subs: typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || ["実施確認", "完了確認"])
-                    }));
+                await wsAuthReady;
+                const snap = await db.collection('tasks').get();
+
+                if (!snap.empty) {
+                    tasks = snap.docs.map(d => {
+                        const t = d.data();
+                        return {
+                            id: Number(d.id) || Date.now(),
+                            name: t.name || "",
+                            tag: t.tag || "その他",
+                            subs: Array.isArray(t.subs) ? t.subs : ["実施確認", "完了確認"]
+                        };
+                    });
                 } else {
                     // デフォルトデータ
-                    tasks = [
-                        { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] }
-                    ];
-                    await saveTasksDataToCloud();
+                    const defaultTask = { id: Date.now(), name: "レジ回りメンテナンス", tag: "レジ", subs: ["レジ拭き", "釣銭確認"] };
+                    tasks = [defaultTask];
+                    await saveTaskToCloud(defaultTask);
                 }
+                assignmentMap = await computeTaskAssignmentMap();
             } catch (error) {
                 console.error("タスクデータ取得エラー:", error);
                 tasks = JSON.parse(localStorage.getItem('ws_tasks_master')) || [
@@ -129,23 +137,15 @@
             render();
         }
 
-        // クラウドへタスクデータを保存
-        async function saveTasksDataToCloud() {
+        // Firestoreへタスク1件を保存
+        async function saveTaskToCloud(task) {
             try {
-                // スプレッドシート送信用に subs をカンマ区切り文字列などに整形
-                const uploadData = tasks.map(t => ({
-                    id: t.id,
-                    name: t.name,
-                    tag: t.tag,
-                    subs: Array.isArray(t.subs) ? t.subs.join(',') : t.subs
-                }));
-
-                await fetch(GAS_API_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sheet: "tasks", action: "save", rows: uploadData })
+                await db.collection('tasks').doc(String(task.id)).set({
+                    name: task.name,
+                    tag: task.tag,
+                    subs: task.subs
                 });
+                localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
             } catch (error) {
                 console.error("タスクデータ保存エラー:", error);
                 alert("クラウドへの保存に失敗しました。");
@@ -169,8 +169,6 @@
             filterContainer.innerHTML = allTags.map(t => `
                 <button onclick="filterTasks('${t}')" class="px-3 py-1 ${currentFilter === t ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'} rounded-full text-sm font-bold whitespace-nowrap">${t}</button>
             `).join('');
-
-            const assignmentMap = getTaskAssignmentMap();
 
             let filteredTasks = currentFilter === 'すべて' ? [...tasks] : tasks.filter(t => (t.tag || 'その他') === currentFilter);
 
@@ -243,42 +241,47 @@
             tasks.push(newTask);
             currentSort = 'date_desc';
             document.getElementById('sort-select').value = 'date_desc';
-            
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('task-content').classList.add('hidden');
-            await saveTasksDataToCloud();
-            await fetchTasksData();
+            await saveTaskToCloud(newTask);
+            render();
         }
 
-        async function updateTask(id, key, val) { 
-            tasks.find(t => t.id === id)[key] = val; 
-            await saveTasksDataToCloud();
-            render(); 
+        async function updateTask(id, key, val) {
+            const t = tasks.find(t => t.id === id);
+            t[key] = val;
+            await saveTaskToCloud(t);
+            render();
         }
 
-        async function updateSub(id, sIdx, val) { 
-            tasks.find(t => t.id === id).subs[sIdx] = val; 
-            await saveTasksDataToCloud();
+        async function updateSub(id, sIdx, val) {
+            const t = tasks.find(t => t.id === id);
+            t.subs[sIdx] = val;
+            await saveTaskToCloud(t);
         }
 
-        async function deleteTask(id) { 
-            tasks = tasks.filter(t => t.id !== id); 
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('task-content').classList.add('hidden');
-            await saveTasksDataToCloud();
-            await fetchTasksData();
+        async function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            try {
+                await db.collection('tasks').doc(String(id)).delete();
+                localStorage.setItem('ws_tasks_master', JSON.stringify(tasks));
+            } catch (error) {
+                console.error("タスク削除エラー:", error);
+                alert("クラウドからの削除に失敗しました。");
+            }
+            render();
         }
 
-        async function addSub(id) { 
-            tasks.find(t => t.id === id).subs.push("新規項目"); 
-            await saveTasksDataToCloud();
-            render(); 
+        async function addSub(id) {
+            const t = tasks.find(t => t.id === id);
+            t.subs.push("新規項目");
+            await saveTaskToCloud(t);
+            render();
         }
 
-        async function deleteSub(id, sIdx) { 
-            tasks.find(t => t.id === id).subs.splice(sIdx, 1); 
-            await saveTasksDataToCloud();
-            render(); 
+        async function deleteSub(id, sIdx) {
+            const t = tasks.find(t => t.id === id);
+            t.subs.splice(sIdx, 1);
+            await saveTaskToCloud(t);
+            render();
         }
 
         // 初期化実行

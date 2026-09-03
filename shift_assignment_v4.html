@@ -5,6 +5,10 @@
     <title>シフト割当管理（クラウド同期）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <!-- ファビコン (ブラウザータブ用) -->
     <link rel="icon" type="image/png" href="work_schedule.png">
 
@@ -98,9 +102,6 @@
     <script>
         lucide.createIcons();
 
-        // ★ここにGASのウェブアプリURLを設定してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
-
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
@@ -112,18 +113,19 @@
         let activeCat = "すべて";
         let isEditing = false;
 
-        // クラウド（またはローカル）からデータ一括取得
+        // Firestore（またはローカル）からデータ一括取得
         async function initData() {
             try {
+                await wsAuthReady;
+
                 // 1. タスクマスターの取得
-                const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
-                const taskData = await taskRes.json();
+                const taskSnap = await db.collection('tasks').get();
                 let rawTasks = [];
-                if (Array.isArray(taskData) && taskData.length > 0) {
-                    rawTasks = taskData.map(t => ({
-                        name: t.name,
-                        tag: t.tag || "その他",
-                        subs: typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : []
+                if (!taskSnap.empty) {
+                    rawTasks = taskSnap.docs.map(d => ({
+                        name: d.data().name,
+                        tag: d.data().tag || "その他",
+                        subs: Array.isArray(d.data().subs) ? d.data().subs : []
                     }));
                 } else {
                     rawTasks = [
@@ -141,15 +143,9 @@
                     TASKS_MASTER[tag].push(t.name);
                 });
 
-                // 2. シフトデータの取得（店舗別シート: shifts_store_1 など）
-                const sheetName = `shifts_${currentStoreId}`;
-                const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
-                const shiftDataJson = await shiftRes.json();
-
-                if (Array.isArray(shiftDataJson) && shiftDataJson.length > 0) {
-                    // JSON形式で保存されていたデータを復元
-                    shiftsData = JSON.parse(shiftDataJson[0].data || "{}");
-                }
+                // 2. シフトデータの取得（店舗ごとに1ドキュメント: shifts/{storeId}）
+                const shiftDoc = await db.collection('shifts').doc(currentStoreId).get();
+                shiftsData = shiftDoc.exists ? shiftDoc.data() : {};
 
                 if (!shiftsData || Object.keys(shiftsData).length === 0) {
                     // デフォルトシフトデータ（PDF準拠）
@@ -193,18 +189,12 @@
             renderBoard();
         }
 
-        // クラウドへシフトデータを保存
+        // Firestoreへシフトデータを保存
         async function saveShiftsToCloud() {
             localStorage.setItem(`ws_shifts_data_${currentStoreId}`, JSON.stringify(shiftsData));
             try {
-                const sheetName = `shifts_${currentStoreId}`;
-                const payload = [{ id: currentStoreId, data: JSON.stringify(shiftsData) }];
-                await fetch(GAS_API_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sheet: sheetName, action: "save", rows: payload })
-                });
+                await wsAuthReady;
+                await db.collection('shifts').doc(currentStoreId).set(shiftsData);
             } catch (error) {
                 console.error("シフト保存エラー:", error);
             }

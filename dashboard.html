@@ -5,6 +5,10 @@
     <title>店舗管理ダッシュボード</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <!-- ファビコン (ブラウザータブ用) -->
     <link rel="icon" type="image/png" href="work_schedule.png">
 
@@ -112,21 +116,18 @@
     <script>
         lucide.createIcons();
 
-        // ★ここにGASのウェブアプリURLを設定してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
-
         let storesMaster = [];
         let currentStoreId = localStorage.getItem('ws_current_store_id');
         let isStoreEditing = false;
 
-        // クラウドから店舗データを取得
+        // Firestoreから店舗データを取得
         async function fetchStoresData() {
             try {
-                const response = await fetch(`${GAS_API_URL}?sheet=stores`);
-                const data = await response.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    storesMaster = data;
+                await wsAuthReady;
+                const snap = await db.collection('stores').get();
+
+                if (!snap.empty) {
+                    storesMaster = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 } else {
                     // 初期データ（1号店・2号店）
                     storesMaster = [
@@ -154,15 +155,15 @@
             renderStoreSelect();
         }
 
-        // クラウドへ店舗データを保存
+        // Firestoreへ店舗データを保存
         async function saveStoresDataToCloud() {
             try {
-                await fetch(GAS_API_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sheet: "stores", action: "save", rows: storesMaster })
+                await wsAuthReady;
+                const batch = db.batch();
+                storesMaster.forEach(s => {
+                    batch.set(db.collection('stores').doc(s.id), { name: s.name });
                 });
+                await batch.commit();
             } catch (error) {
                 console.error("店舗データ保存エラー:", error);
                 alert("クラウドへの保存に失敗しました。");

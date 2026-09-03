@@ -6,6 +6,10 @@
     <title>ワークスケジュール - プログレスバー対応ポータル</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <link rel="icon" type="image/png" href="icon-192.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
@@ -168,9 +172,6 @@
 
         showLoading();
 
-        // ★ここにGASのウェブアプリURLを設定してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec";
-
         const currentStoreId = localStorage.getItem('ws_current_store_id') || "store_1";
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
@@ -210,30 +211,25 @@
         async function initPortal() {
             showLoading();
             try {
-                const staffRes = await fetch(`${GAS_API_URL}?sheet=staff`);
-                const staffData = await staffRes.json();
-                staffList = Array.isArray(staffData) ? staffData.filter(s => !s.store || s.store === currentStore.name || s.store === "共通") : [];
-                if (staffList.length === 0 && Array.isArray(staffData)) staffList = staffData;
+                await wsAuthReady;
 
-                const taskRes = await fetch(`${GAS_API_URL}?sheet=tasks`);
-                const taskData = await taskRes.json();
-                if (Array.isArray(taskData)) {
-                    taskData.forEach(t => { 
-                        if (t && t.name) {
-                            const tName = t.name.trim();
-                            taskMasterMap[tName] = typeof t.subs === 'string' ? t.subs.split(',').filter(Boolean) : (t.subs || []); 
-                            taskStandardTimes[tName] = Number(t.standard_sec) || 0; 
-                        }
-                    });
-                }
+                const staffSnap = await db.collection('staff').get();
+                const staffData = staffSnap.docs.map(d => ({ uniqueId: d.id, ...d.data() }));
+                staffList = staffData.filter(s => !s.store || s.store === currentStore.name || s.store === "共通");
+                if (staffList.length === 0) staffList = staffData;
 
-                const sheetName = `shifts_${currentStoreId}`;
-                const shiftRes = await fetch(`${GAS_API_URL}?sheet=${sheetName}`);
-                const shiftDataJson = await shiftRes.json();
+                const taskSnap = await db.collection('tasks').get();
+                taskSnap.docs.forEach(d => {
+                    const t = d.data();
+                    if (t && t.name) {
+                        const tName = t.name.trim();
+                        taskMasterMap[tName] = Array.isArray(t.subs) ? t.subs : [];
+                        taskStandardTimes[tName] = Number(t.standard_sec) || 0;
+                    }
+                });
 
-                if (Array.isArray(shiftDataJson) && shiftDataJson.length > 0) {
-                    SHIFT_DATA = JSON.parse(shiftDataJson[0].data || "{}");
-                }
+                const shiftDoc = await db.collection('shifts').doc(currentStoreId).get();
+                SHIFT_DATA = shiftDoc.exists ? shiftDoc.data() : {};
 
                 if (!SHIFT_DATA || Object.keys(SHIFT_DATA).length === 0) {
                     SHIFT_DATA = {
@@ -497,10 +493,10 @@
 
                 const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
                 const currentHour = regKey === 'r1' ? state.r1Hour : state.r2Hour;
-                const logData = {
-                    sheet: "logs",
-                    action: "append",
-                    row: {
+
+                try {
+                    await wsAuthReady;
+                    await db.collection('logs').add({
                         timestamp: new Date().toLocaleString(),
                         store: currentStore.name,
                         shift: currentShift.name,
@@ -508,16 +504,8 @@
                         staff: staffName,
                         task: taskName + " (見送り・未完了)",
                         hour: currentHour + "時台",
-                        duration_sec: 0
-                    }
-                };
-
-                try {
-                    fetch(GAS_API_URL, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(logData)
+                        duration_sec: 0,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                 } catch (err) {
                     console.error("スキップログ送信エラー:", err);
@@ -555,10 +543,10 @@
                 saveLocalState();
 
                 const staffName = regKey === 'r1' ? state.r1Staff : state.r2Staff;
-                const logData = {
-                    sheet: "logs",
-                    action: "append",
-                    row: {
+
+                try {
+                    await wsAuthReady;
+                    await db.collection('logs').add({
                         timestamp: new Date().toLocaleString(),
                         store: currentStore.name,
                         shift: currentShift.name,
@@ -566,16 +554,8 @@
                         staff: staffName,
                         task: taskName,
                         hour: currentHour + "時台",
-                        duration_sec: durationSec
-                    }
-                };
-
-                try {
-                    fetch(GAS_API_URL, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(logData)
+                        duration_sec: durationSec,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                 } catch (err) {
                     console.error("ログ送信エラー:", err);

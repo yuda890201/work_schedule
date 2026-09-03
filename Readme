@@ -1,1 +1,23 @@
+# ワークスケジュールアプリ (Firebase連携版)
 
+このアプリは Google Apps Script + スプレッドシート構成から、Firebase (Firestore + Anonymous Auth) を
+バックエンドとする構成に移行しています。
+
+## 構成ファイル
+
+- `firebase-init.js` : Firebase初期化（全ページ共通で読み込み）。`firebaseConfig` に実際のプロジェクト値を設定済み。
+- `firestore.rules` : Firestoreセキュリティルール（匿名認証を含むサインイン済みユーザーのみ読み書き可）。
+
+## Firebaseコンソールで行う設定（初回のみ）
+
+1. **Authentication > Sign-in method** で「匿名」プロバイダを有効化してください。
+   これを行わないと `signInAnonymously()` が失敗し、全ページでデータ取得・保存ができません。
+2. **Firestore Database** を作成し（本番モードでOK）、`firestore.rules` の内容をルールタブに貼り付けて公開してください。
+
+## Firestoreのデータ構造
+
+- `stores/{storeId}` : `{ name }`
+- `staff/{uniqueId}` : `{ empId, name, store, note }`
+- `tasks/{taskId}` : `{ name, tag, subs: string[] }`
+- `shifts/{storeId}` : シフトキーごとのマップ（例: `{ s_morning: { name, start, end, tasks: { r1: {...}, r2: {...} } } }`）
+- `logs/{autoId}` : `{ timestamp, store, shift, reg, staff, task, hour, duration_sec, createdAt }`
