@@ -5,6 +5,10 @@
     <title>スタッフ管理（スプレッドシート連携）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+    <script src="firebase-init.js"></script>
     <!-- ファビコン (ブラウザータブ用) -->
     <link rel="icon" type="image/png" href="work_schedule.png">
 
@@ -72,9 +76,6 @@
     <script>
         lucide.createIcons();
 
-        // ★ここにデプロイしたGoogle Apps ScriptのウェブアプリURLを入力してください
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyaJTbew77-WVvluXD7OnQPa2TVhoFRPLzv3Bq3uopQUPTjhqTtdUIV4du5pmSzyUkFaA/exec"; 
-
         const storesMaster = JSON.parse(localStorage.getItem('ws_stores_master')) || [{ id: "store_1", name: "1号店" }, { id: "store_2", name: "2号店" }];
         const currentStoreId = localStorage.getItem('ws_current_store_id') || storesMaster[0].id;
         const currentStore = storesMaster.find(s => s.id === currentStoreId) || storesMaster[0];
@@ -83,14 +84,14 @@
         let staffList = [];
         let editingUniqueId = null;
 
-        // スプレッドシートからデータを取得
+        // Firestoreからデータを取得
         async function fetchStaffData() {
             try {
-                const response = await fetch(`${GAS_API_URL}?sheet=staff`);
-                const data = await response.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    staffList = data;
+                await wsAuthReady;
+                const snap = await db.collection('staff').get();
+
+                if (!snap.empty) {
+                    staffList = snap.docs.map(d => ({ uniqueId: isNaN(Number(d.id)) ? d.id : Number(d.id), ...d.data() }));
                 } else {
                     // データが空の場合はデフォルトデータを生成してクラウドに保存
                     staffList = [
@@ -111,15 +112,17 @@
             renderTable();
         }
 
-        // スプレッドシートへデータを保存
+        // Firestoreへデータを保存（全件をバッチ書き込み）
         async function saveStaffDataToCloud() {
             try {
-                await fetch(GAS_API_URL, {
-                    method: "POST",
-                    mode: "no-cors", // GASのCORS制限回避用
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sheet: "staff", action: "save", rows: staffList })
+                await wsAuthReady;
+                const batch = db.batch();
+                staffList.forEach(s => {
+                    const { uniqueId, ...rest } = s;
+                    batch.set(db.collection('staff').doc(String(uniqueId)), rest);
                 });
+                await batch.commit();
+                localStorage.setItem('ws_staff_list', JSON.stringify(staffList));
             } catch (error) {
                 console.error("データ保存エラー:", error);
                 alert("クラウドへの保存に失敗しました。");
